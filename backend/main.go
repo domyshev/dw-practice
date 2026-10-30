@@ -135,6 +135,7 @@ func openDB(path string) (*sql.DB, error) {
  CREATE TABLE IF NOT EXISTS sessions(hash TEXT PRIMARY KEY,user_id TEXT NOT NULL REFERENCES users(id),expires_at INTEGER NOT NULL);
  CREATE TABLE IF NOT EXISTS entries(id TEXT PRIMARY KEY,user_id TEXT NOT NULL REFERENCES users(id),body TEXT NOT NULL,occurred_at TEXT NOT NULL,deleted INTEGER NOT NULL DEFAULT 0);
  CREATE INDEX IF NOT EXISTS entries_user ON entries(user_id,deleted);
+ CREATE TABLE IF NOT EXISTS create_requests(user_id TEXT NOT NULL REFERENCES users(id),request_key TEXT NOT NULL,request_hash TEXT NOT NULL,entry_body TEXT NOT NULL,PRIMARY KEY(user_id,request_key));
  CREATE TABLE IF NOT EXISTS audit(id TEXT PRIMARY KEY,user_id TEXT NOT NULL REFERENCES users(id),entry_id TEXT NOT NULL,action TEXT NOT NULL,at TEXT NOT NULL,before_body TEXT,after_body TEXT);
  CREATE INDEX IF NOT EXISTS audit_user ON audit(user_id,at);
  CREATE TRIGGER IF NOT EXISTS audit_no_update BEFORE UPDATE ON audit BEGIN SELECT RAISE(ABORT,'Audit records are immutable'); END;
@@ -224,53 +225,14 @@ func (a *app) requestCode(w http.ResponseWriter, r *http.Request) {
 		fail(w, 422, "Enter a valid email address")
 		return
 	}
-	a.mu.Lock()
-	defer a.mu.Unlock()
-	t := time.Now().Unix()
 	ip, _, _ := net.SplitHostPort(r.RemoteAddr)
-	var emailCount, ipCount int
-	var latest int64
-	err = a.db.QueryRow(`SELECT count(*),coalesce(max(created_at),0) FROM codes WHERE email=? AND created_at>?`, email, t-3600).Scan(&emailCount, &latest)
-	if err != nil {
-		internal(w, err)
-		return
-	}
-	if err = a.db.QueryRow(`SELECT count(*) FROM codes WHERE ip=? AND created_at>?`, ip, t-3600).Scan(&ipCount); err != nil {
-		internal(w, err)
-		return
-	}
-	if emailCount >= 5 || ipCount >= 20 || t-latest < 60 {
+	id, code, err := a.prepareCode(email, ip)
+	if errors.Is(err, errCodeRateLimited) {
 		w.Header().Set("Retry-After", "60")
 		fail(w, 429, "Too many requests. Please try again later.")
 		return
 	}
-	n, err := rand.Int(rand.Reader, big.NewInt(1000000))
 	if err != nil {
-		internal(w, err)
-		return
-	}
-	code := fmt.Sprintf("%06d", n.Int64())
-	tx, err := a.db.Begin()
-	if err != nil {
-		internal(w, err)
-		return
-	}
-	defer tx.Rollback()
-	if _, err = tx.Exec(`UPDATE codes SET consumed=1 WHERE email=?`, email); err != nil {
-		internal(w, err)
-		return
-	}
-	res, err := tx.Exec(`INSERT INTO codes(email,hash,ip,created_at,expires_at) VALUES(?,?,?,?,?)`, email, a.codeHash(email, code), ip, t, t+600)
-	if err != nil {
-		internal(w, err)
-		return
-	}
-	id, err := res.LastInsertId()
-	if err != nil {
-		internal(w, err)
-		return
-	}
-	if err = tx.Commit(); err != nil {
 		internal(w, err)
 		return
 	}
@@ -282,6 +244,53 @@ func (a *app) requestCode(w http.ResponseWriter, r *http.Request) {
 	}
 	respond(w, 202, map[string]string{"message": "Your sign-in code is on its way"})
 }
+
+var errCodeRateLimited = errors.New("code request rate limited")
+
+// Only the rate-limit check and code insertion need the shared lock.
+// External delivery must not block other users' verification or journal writes.
+func (a *app) prepareCode(email, ip string) (int64, string, error) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	t := time.Now().Unix()
+	var emailCount, ipCount int
+	var latest int64
+	if err := a.db.QueryRow(`SELECT count(*),coalesce(max(created_at),0) FROM codes WHERE email=? AND created_at>?`, email, t-3600).Scan(&emailCount, &latest); err != nil {
+		return 0, "", err
+	}
+	if err := a.db.QueryRow(`SELECT count(*) FROM codes WHERE ip=? AND created_at>?`, ip, t-3600).Scan(&ipCount); err != nil {
+		return 0, "", err
+	}
+	if emailCount >= 5 || ipCount >= 20 || t-latest < 60 {
+		return 0, "", errCodeRateLimited
+	}
+	n, err := rand.Int(rand.Reader, big.NewInt(1000000))
+	if err != nil {
+		return 0, "", err
+	}
+	code := fmt.Sprintf("%06d", n.Int64())
+	tx, err := a.db.Begin()
+	if err != nil {
+		return 0, "", err
+	}
+	defer tx.Rollback()
+	if _, err = tx.Exec(`UPDATE codes SET consumed=1 WHERE email=?`, email); err != nil {
+		return 0, "", err
+	}
+	res, err := tx.Exec(`INSERT INTO codes(email,hash,ip,created_at,expires_at) VALUES(?,?,?,?,?)`, email, a.codeHash(email, code), ip, t, t+600)
+	if err != nil {
+		return 0, "", err
+	}
+	id, err := res.LastInsertId()
+	if err != nil {
+		return 0, "", err
+	}
+	if err = tx.Commit(); err != nil {
+		return 0, "", err
+	}
+	return id, code, nil
+}
+
 func (a *app) verifyCode(w http.ResponseWriter, r *http.Request) {
 	var in struct {
 		Email string `json:"email"`
@@ -439,6 +448,15 @@ func (a *app) mutate(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
+	requestKey := r.Header.Get("Idempotency-Key")
+	if len(requestKey) > 128 {
+		fail(w, 400, "Idempotency key must be at most 128 bytes")
+		return
+	}
+	requestHash := ""
+	if r.Method == "POST" && requestKey != "" {
+		requestHash = digest(serialized(&e).(string))
+	}
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	tx, err := a.db.Begin()
@@ -451,6 +469,28 @@ func (a *app) mutate(w http.ResponseWriter, r *http.Request) {
 	action := "created"
 	status := 200
 	if r.Method == "POST" {
+		if requestKey != "" {
+			var previousHash, body string
+			err = tx.QueryRow(`SELECT request_hash,entry_body FROM create_requests WHERE user_id=? AND request_key=?`, u.ID, requestKey).Scan(&previousHash, &body)
+			if err == nil {
+				if previousHash != requestHash {
+					fail(w, 409, "This idempotency key was already used for another entry")
+					return
+				}
+				var previous entry
+				if err = json.Unmarshal([]byte(body), &previous); err != nil {
+					internal(w, err)
+					return
+				}
+				respond(w, 201, map[string]any{"entry": previous})
+				return
+			}
+			if !errors.Is(err, sql.ErrNoRows) {
+				internal(w, err)
+				return
+			}
+		}
+
 		e.ID = token()
 		e.UserID = u.ID
 		e.CreatedAt = now()
@@ -504,6 +544,12 @@ func (a *app) mutate(w http.ResponseWriter, r *http.Request) {
 			_, err = tx.Exec(`UPDATE entries SET body=?,occurred_at=? WHERE id=? AND user_id=?`, serialized(&e), mustUTC(e.OccurredAt), e.ID, u.ID)
 		}
 		if err != nil {
+			internal(w, err)
+			return
+		}
+	}
+	if r.Method == "POST" && requestKey != "" {
+		if _, err = tx.Exec(`INSERT INTO create_requests(user_id,request_key,request_hash,entry_body) VALUES(?,?,?,?)`, u.ID, requestKey, requestHash, serialized(after)); err != nil {
 			internal(w, err)
 			return
 		}

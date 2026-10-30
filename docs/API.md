@@ -38,3 +38,7 @@ The returned entry also contains `id`, server-derived `userId`, `total`, `offset
 Audit events contain `{id,entryId,action,at,before,after}`. `action` is `created`, `updated`, or `deleted`. `at` is a server UTC timestamp. Creation has `before:null`; deletion has `after:null`; snapshots preserve complete entry fields, including the owning user's ID and original time zone.
 
 An iPhone client can use this same service over HTTPS with a first-party cookie session. A future native client should send the configured first-party Origin or use a separately designed native-auth endpoint; do not weaken the web Origin policy to accommodate it. Offline synchronization will need a separate idempotent mutation and conflict-resolution contract.
+
+## Safe creation retries
+
+`POST /entries` accepts an optional `Idempotency-Key` header (at most 128 bytes). The web editor generates a random UUID and reuses it for retries of the same unchanged submission. The key is scoped to the authenticated user. Repeating the key with the same validated payload returns the original 201 response without another entry or audit event, including concurrent retries. Reusing it with different data returns 409. The key, original response, entry and audit event commit or roll back together. A changed form submission uses a new key. Clients omitting the header retain the original non-idempotent create behavior.

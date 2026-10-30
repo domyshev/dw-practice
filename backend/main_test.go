@@ -309,3 +309,206 @@ func TestPersistence(t *testing.T) {
 		t.Fatal("records did not survive restart")
 	}
 }
+
+func TestSlowDeliveryDoesNotBlockVerificationOrJournalWrites(t *testing.T) {
+	a, h, codes := fixture(t)
+	cookie := login(t, h, codes, "writer@example.com")
+	if w := call(h, "POST", "/api/auth/request", map[string]string{"email": "verify@example.com"}, nil); w.Code != 202 {
+		t.Fatal(w.Body.String())
+	}
+	verifyCode := codes["verify@example.com"]
+	started, release := make(chan struct{}), make(chan struct{})
+	defer close(release)
+	a.send = func(context.Context, string, string) error { close(started); <-release; return nil }
+	delivery := make(chan int, 1)
+	go func() {
+		delivery <- call(h, "POST", "/api/auth/request", map[string]string{"email": "slow@example.com"}, nil).Code
+	}()
+	select {
+	case <-started:
+	case <-time.After(2 * time.Second):
+		t.Fatal("delivery did not start")
+	}
+	writes, verification := make(chan int, 1), make(chan int, 1)
+	go func() { writes <- call(h, "POST", "/api/entries", validEntry(), cookie).Code }()
+	go func() {
+		verification <- call(h, "POST", "/api/auth/verify", map[string]string{"email": "verify@example.com", "code": verifyCode}, nil).Code
+	}()
+	for name, result := range map[string]<-chan int{"write": writes, "verification": verification} {
+		select {
+		case status := <-result:
+			if status != 200 && status != 201 {
+				t.Fatalf("%s failed: %d", name, status)
+			}
+		case <-time.After(2 * time.Second):
+			t.Fatalf("%s blocked by email delivery", name)
+		}
+	}
+}
+
+func TestFailedOlderDeliveryDoesNotInvalidateNewCode(t *testing.T) {
+	a, h, _ := fixture(t)
+	started, release := make(chan struct{}), make(chan struct{})
+	var calls int
+	var currentCode string
+	var deliveryMu sync.Mutex
+	a.send = func(_ context.Context, _ string, code string) error {
+		deliveryMu.Lock()
+		calls++
+		first := calls == 1
+		if !first {
+			currentCode = code
+		}
+		deliveryMu.Unlock()
+		if first {
+			close(started)
+			<-release
+			return fmt.Errorf("old delivery failed")
+		}
+		return nil
+	}
+	oldRequest := make(chan int, 1)
+	go func() {
+		oldRequest <- call(h, "POST", "/api/auth/request", map[string]string{"email": "person@example.com"}, nil).Code
+	}()
+	select {
+	case <-started:
+	case <-time.After(2 * time.Second):
+		close(release)
+		t.Fatal("delivery did not start")
+	}
+	if _, err := a.db.Exec(`UPDATE codes SET created_at=?`, time.Now().Unix()-61); err != nil {
+		close(release)
+		t.Fatal(err)
+	}
+	newRequest := make(chan int, 1)
+	go func() {
+		newRequest <- call(h, "POST", "/api/auth/request", map[string]string{"email": "person@example.com"}, nil).Code
+	}()
+	select {
+	case status := <-newRequest:
+		if status != 202 {
+			close(release)
+			t.Fatal(status)
+		}
+	case <-time.After(2 * time.Second):
+		close(release)
+		t.Fatal("new code request blocked")
+	}
+	close(release)
+	select {
+	case status := <-oldRequest:
+		if status != 502 {
+			t.Fatal(status)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("old delivery did not finish")
+	}
+	deliveryMu.Lock()
+	code := currentCode
+	deliveryMu.Unlock()
+	if w := call(h, "POST", "/api/auth/verify", map[string]string{"email": "person@example.com", "code": code}, nil); w.Code != 200 {
+		t.Fatal("older failure invalidated the new code", w.Body.String())
+	}
+}
+
+func callWithKey(h http.Handler, e entry, cookie *http.Cookie, key string) *httptest.ResponseRecorder {
+	var b bytes.Buffer
+	_ = json.NewEncoder(&b).Encode(e)
+	r := httptest.NewRequest("POST", "/api/entries", &b)
+	r.RemoteAddr = "127.0.0.1:1234"
+	r.Header.Set("Content-Type", "application/json")
+	r.Header.Set("Idempotency-Key", key)
+	r.AddCookie(cookie)
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, r)
+	return w
+}
+
+func TestIdempotentCreateRetriesAndConflict(t *testing.T) {
+	a, h, codes := fixture(t)
+	c := login(t, h, codes, "one@example.com")
+	e := validEntry()
+	first := callWithKey(h, e, c, "operation-1")
+	retry := callWithKey(h, e, c, "operation-1")
+	if first.Code != 201 || retry.Code != 201 || first.Body.String() != retry.Body.String() {
+		t.Fatal("retry must return the same entry", first.Body.String(), retry.Body.String())
+	}
+	e.Repetitions++
+	if w := callWithKey(h, e, c, "operation-1"); w.Code != 409 {
+		t.Fatal("reused key accepted different payload", w.Code)
+	}
+	for _, table := range []string{"entries", "audit", "create_requests"} {
+		var count int
+		if err := a.db.QueryRow("SELECT count(*) FROM " + table).Scan(&count); err != nil || count != 1 {
+			t.Fatalf("%s: %d, %v", table, count, err)
+		}
+	}
+}
+
+func TestIdempotencyKeysAreScopedToUser(t *testing.T) {
+	_, h, codes := fixture(t)
+	a := login(t, h, codes, "a@example.com")
+	b := login(t, h, codes, "b@example.com")
+	first := callWithKey(h, validEntry(), a, "shared-key")
+	second := callWithKey(h, validEntry(), b, "shared-key")
+	if first.Code != 201 || second.Code != 201 {
+		t.Fatal(first.Code, second.Code)
+	}
+	var left, right struct {
+		Entry entry `json:"entry"`
+	}
+	_ = json.Unmarshal(first.Body.Bytes(), &left)
+	_ = json.Unmarshal(second.Body.Bytes(), &right)
+	if left.Entry.ID == right.Entry.ID || left.Entry.UserID == right.Entry.UserID {
+		t.Fatal("idempotency leaked across accounts")
+	}
+}
+
+func TestConcurrentIdempotentCreate(t *testing.T) {
+	a, h, codes := fixture(t)
+	c := login(t, h, codes, "a@example.com")
+	results := make(chan *httptest.ResponseRecorder, 2)
+	var wg sync.WaitGroup
+	for i := 0; i < 2; i++ {
+		wg.Add(1)
+		go func() { defer wg.Done(); results <- callWithKey(h, validEntry(), c, "same-operation") }()
+	}
+	wg.Wait()
+	close(results)
+	var body string
+	for w := range results {
+		if w.Code != 201 {
+			t.Fatal(w.Code, w.Body.String())
+		}
+		if body != "" && w.Body.String() != body {
+			t.Fatal("concurrent requests created different entries")
+		}
+		body = w.Body.String()
+	}
+	var count int
+	if err := a.db.QueryRow(`SELECT count(*) FROM audit`).Scan(&count); err != nil || count != 1 {
+		t.Fatal(count, err)
+	}
+}
+
+func TestFailedAuditRollsBackIdempotencyKey(t *testing.T) {
+	a, h, codes := fixture(t)
+	c := login(t, h, codes, "a@example.com")
+	if _, err := a.db.Exec(`CREATE TRIGGER fail_idempotent_audit BEFORE INSERT ON audit BEGIN SELECT RAISE(ABORT,'test failure'); END`); err != nil {
+		t.Fatal(err)
+	}
+	if w := callWithKey(h, validEntry(), c, "retry-after-failure"); w.Code != 500 {
+		t.Fatal(w.Code)
+	}
+	var count int
+	if err := a.db.QueryRow(`SELECT count(*) FROM create_requests`).Scan(&count); err != nil || count != 0 {
+		t.Fatal("failed write retained key", count, err)
+	}
+	if _, err := a.db.Exec(`DROP TRIGGER fail_idempotent_audit`); err != nil {
+		t.Fatal(err)
+	}
+	if w := callWithKey(h, validEntry(), c, "retry-after-failure"); w.Code != 201 {
+		t.Fatal(w.Code, w.Body.String())
+	}
+}

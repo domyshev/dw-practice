@@ -45,11 +45,14 @@ This first version is intended for one Go service instance with a persistent SQL
 ```sh
 npm ci
 npm run build
+npm test
 go test -race -count=1 ./...
 go vet ./...
 ```
 
-Backend integration tests use isolated temporary SQLite databases and cover arithmetic, IANA offsets including DST and fractional-hour zones, invalid inputs, login/logout, OTP reuse/expiry/lockout, resend limits and failed delivery, concurrent OTP use, record ownership, stale writes, full audit snapshots, audit immutability, rollback when audit writing fails, origin checks and persistence across restart.
+Frontend regression tests (`npm test`, Node.js 22.12+ or 24) simulate delayed journal responses, account switches, obsolete 401 errors, request cancellation, out-of-order loads, and successful saves followed by failed refreshes. Successful mutations update local entries and close the editor before refreshing. A separate refresh warning offers Retry load without repeating the write. Create requests use a per-user idempotency key retained for retries of the same unchanged form.
+
+Backend integration tests use isolated temporary SQLite databases and cover arithmetic, IANA offsets including DST and fractional-hour zones, invalid inputs, login/logout, OTP reuse/expiry/lockout, resend limits and failed delivery, concurrent OTP use, record ownership, stale writes, full audit snapshots, audit immutability, rollback when audit writing fails, origin checks persistence across restart, nonblocking slow email delivery, failure of an older delivery after a newer code was issued, and idempotent create retry/isolation/concurrency/rollback.
 
 Browser verification: request and verify a local sign-in code, open the journal, save 2 large malas + 1 small mala + 4 repetitions, confirm 247 repetitions and the original device zone in history, inspect the created audit event, add a 1,000-repetition starting balance and confirm lifetime total 1,247 while today/weekly totals remain 247. Browser QA uses a disposable account in a separate preview database outside the deliverable. Real Resend delivery and Docker deployment require external configuration and were not tested.
 
