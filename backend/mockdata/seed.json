@@ -1,0 +1,33 @@
+{
+  "users": [
+    {
+      "id": "mock-demo",
+      "email": "demo@dwpractice.test",
+      "entries": [
+        {"id":"demo-initial-prostrations","practice":"prostrations","repetitions":12000,"initial":true,"daysAgo":180,"note":"Practice completed before this journal"},
+        {"id":"demo-initial-diamond","practice":"diamond-mind","repetitions":5400,"initial":true,"daysAgo":180,"note":"Imported starting balance"},
+        {"id":"demo-initial-mandala","practice":"mandala","repetitions":2700,"initial":true,"daysAgo":180},
+        {"id":"demo-initial-guru","practice":"guru-yoga","repetitions":1080,"initial":true,"daysAgo":180},
+        {"id":"demo-today-prostrations","practice":"prostrations","large":2,"small":1,"repetitions":4,"daysAgo":0,"minutesAgo":5,"note":"Morning practice"},
+        {"id":"demo-today-diamond","practice":"diamond-mind","large":3,"daysAgo":0,"minutesAgo":2,"note":"A quiet session"},
+        {"id":"demo-yesterday-mandala","practice":"mandala","large":2,"daysAgo":1,"minutesAgo":30,"note":"Evening offering"},
+        {"id":"demo-yesterday-guru","practice":"guru-yoga","large":1,"small":2,"daysAgo":1,"minutesAgo":10},
+        {"id":"demo-day2-prostrations","practice":"prostrations","large":1,"small":1,"daysAgo":2,"timeZone":"Asia/Kathmandu","note":"Practice while travelling, UTC+05:45"},
+        {"id":"demo-day3-diamond","practice":"diamond-mind","large":2,"daysAgo":3},
+        {"id":"demo-day4-mandala","practice":"mandala","small":3,"daysAgo":4},
+        {"id":"demo-day5-guru","practice":"guru-yoga","large":2,"daysAgo":5,"timeZone":"America/New_York"},
+        {"id":"demo-day6-prostrations","practice":"prostrations","large":3,"daysAgo":6},
+        {"id":"demo-edited","practice":"diamond-mind","large":1,"repetitions":10,"daysAgo":8,"note":"Original count","editRepetitions":15},
+        {"id":"demo-deleted","practice":"mandala","small":1,"daysAgo":9,"note":"Example removed entry, retained in the audit log","deleted":true}
+      ]
+    },
+    {
+      "id": "mock-second",
+      "email": "second@dwpractice.test",
+      "entries": [
+        {"id":"second-initial","practice":"guru-yoga","repetitions":432,"initial":true,"daysAgo":30},
+        {"id":"second-today","practice":"guru-yoga","small":1,"daysAgo":0,"minutesAgo":1,"note":"Only visible to the second account"}
+      ]
+    }
+  ]
+}

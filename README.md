@@ -16,6 +16,17 @@ To send real email, copy `.env.example` to `.env`, set `EMAIL_MODE=resend`, `RES
 
 For frontend development, run the Go API with `APP_ORIGIN=http://127.0.0.1:5173 go run ./backend`, and `npm run dev` in another terminal. Vite proxies `/api` to port 8080. Use exactly the configured origin (127.0.0.1 and localhost are different origins).
 
+## Mock development for developers and agents
+
+```sh
+npm ci
+npm run dev:mock
+```
+
+Open http://127.0.0.1:5174/, sign in with `demo@dwpractice.test` and code `123456`. This runs the shared Go API on port 8081 with versioned fixtures and a disposable in-memory database; no email credentials or real data are used. A second account, empty-account flow, all four starting balances, recent activity, time-zone examples and complete edit/delete history are included.
+
+Use `npm run mock:reset` to restore fixtures and `npm run mock:smoke` to verify HTTP login/CRUD/audit while the server is running. Mock sessions use a separate cookie, so the normal development app can run alongside the mock. See [the mock guide](docs/MOCK_SERVER.md) and [agent instructions](AGENTS.md).
+
 ## Included
 
 - React 19, TypeScript, Material UI, Redux Toolkit, Go HTTP API and SQLite with WAL.
@@ -24,7 +35,7 @@ For frontend development, run the Go API with `APP_ORIGIN=http://127.0.0.1:5173 
 - Create, edit and soft-delete entries. Version checks prevent overwriting another session's changes.
 - Explicit starting balances, included in lifetime/practice totals and excluded from daily/weekly activity. Their type cannot be silently changed while editing.
 - Full original local datetime, IANA time zone and UTC offset on each entry. The backend validates the offset against that zone at that instant. It derives the owner from the session, never the request body.
-- Entry history, practice filters, daily/weekly activity and complete JSON export of entries and audit events.
+- Unified practice history covering additions, edits and deletions, practice filters, weekly activity, and TSV/CSV/XLSX export. XLSX includes active entries and complete before/after history in separate worksheets.
 - Transactional audit events containing before/after snapshots, actor association, entry ID and server UTC timestamp. SQLite triggers reject audit updates/deletions. Deleted entries remain in the database and audit log. This protects the application history; it is not cryptographic tamper evidence against a database administrator.
 - Responsive layouts for phone, tablet and desktop; accessible form labels and reduced-motion support.
 
@@ -32,7 +43,7 @@ The history displays each entry's original time and zone. Daily/weekly aggregate
 
 ## Authentication and deployment
 
-Codes expire after 10 minutes, are stored as HMAC digests, are consumed atomically, and allow at most 5 attempts. Resending invalidates earlier codes. Requests are limited to 5 per email and 20 per socket IP per hour, with a 60-second resend cooldown. Failed deliveries invalidate their code. A random 30-day session token is stored only as a digest in SQLite and sent in an HttpOnly, SameSite=Lax cookie. Production cookies are Secure. No permissive CORS is enabled; production mutations require the exact configured Origin and JSON bodies.
+Codes expire after 10 minutes, are stored as HMAC digests, are consumed atomically, and allow at most 5 attempts. Resending invalidates earlier codes. With email delivery enabled, requests are limited to 5 per email and 20 per socket IP per hour, with a 60-second resend cooldown. Local log delivery skips these limits so iterative development does not lock out the developer; this mode can bind only to loopback and is refused in production. Failed deliveries invalidate their code. A random 30-day session token is stored only as a digest in SQLite and sent in an HttpOnly, SameSite=Lax cookie. Production cookies are Secure. No permissive CORS is enabled; production mutations require the exact configured Origin and JSON bodies.
 
 Production requires `APP_ENV=production`, `EMAIL_MODE=resend`, `SESSION_SECRET` of at least 32 random characters, `RESEND_API_KEY`, `EMAIL_FROM`, and an HTTPS `APP_ORIGIN`. Production refuses to start with development settings. Log delivery can bind only to loopback. The server serves the built React app from `dist/`.
 
@@ -61,3 +72,11 @@ See `docs/API.md` for the HTTP contract. The iPhone roadmap is recorded separate
 ## Brand assets
 
 The Diamond Way firewheel and favicon are original assets from the [official Diamond Way Buddhism website](https://www.diamondway-buddhism.org/). Sources: `https://www.diamondway-buddhism.org/images/DWB-firewheel-logo.jpg` and `https://www.diamondway-buddhism.org/wp-content/themes/dwb_theme/assets/img/dw-favicon-192x192.png`. The application wordmark is DW.
+
+## Mobile interface and export
+
+The interface starts with phone layouts. Recent entries are wrapping cards rather than a horizontally scrolling table. The header shows a clickable lowercase `dw` home link, the signed-in account and package version, followed by a menu. Its first control selects Light, System or Dark appearance; Practice, History and Sign out follow below. Theme preference is the only UI setting stored in localStorage. System mode follows operating-system changes.
+
+History is the audit stream, including creation, edits, deletion and starting balances; select an event to see its full before/after snapshots. The export icon offers TSV, CSV and XLSX. Delimited files include all history operations and snapshots, UTF-8 BOM and safe quoting of user text. Formula-like text is escaped for spreadsheet applications. XLSX has Practice and Practice history worksheets with numeric counts and original local timestamps/zones. Its spreadsheet library loads only when XLSX is requested.
+
+Browser layout checks used 430×932 (iPhone 15 Pro Max CSS viewport), 390×844 and 320×740 viewports. These are browser viewport checks, not physical-device certification. Export regression tests cover quoting, user text, deleted records, before/after data, workbook readback and empty journals.
