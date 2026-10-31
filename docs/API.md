@@ -42,3 +42,9 @@ An iPhone client can use this same service over HTTPS with a first-party cookie 
 ## Safe creation retries
 
 `POST /entries` accepts an optional `Idempotency-Key` header (at most 128 bytes). The web editor generates a random UUID and reuses it for retries of the same unchanged submission. The key is scoped to the authenticated user. Repeating the key with the same validated payload returns the original 201 response without another entry or audit event, including concurrent retries. Reusing it with different data returns 409. The key, original response, entry and audit event commit or roll back together. A changed form submission uses a new key. Clients omitting the header retain the original non-idempotent create behavior.
+
+### Incremental practice feed
+
+`GET /api/entries/page?since=<RFC3339>&practice=<practice-id>&cursor=<opaque-cursor>` returns `{items: Entry[], nextCursor: string}`. All query parameters are optional. Pages contain at most 20 active records owned by the session user, ordered by UTC occurrence time and ID descending. An empty cursor ends the feed. The client keeps the same period boundary while requesting subsequent pages. Cursor pagination avoids offset shifts when newer records arrive. Edits and deletions invalidate and reload the client feed.
+
+`GET /api/summary?timeZone=<IANA-zone>` returns daily practice aggregates, with starting balances grouped separately. These have the entry count/date fields needed by the dashboard, but no individual notes, IDs, versions or user details. They must not be edited or exported as individual entries. Full `/api/entries` and `/api/audit` remain available for the Log modal and explicit exports.

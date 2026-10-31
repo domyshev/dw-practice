@@ -5,3 +5,6 @@ data
 .git
 *.db
 *.db-*
+scripts
+tests
+AGENTS.md

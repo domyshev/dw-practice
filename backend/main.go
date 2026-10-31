@@ -10,6 +10,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"flag"
 	"fmt"
 	"io"
 	"log"
@@ -63,6 +64,7 @@ type app struct {
 	origin     string
 	production bool
 	emailMode  string
+	mock       bool
 	send       func(context.Context, string, string) error
 	mu         sync.Mutex
 }
@@ -135,6 +137,7 @@ func openDB(path string) (*sql.DB, error) {
  CREATE TABLE IF NOT EXISTS sessions(hash TEXT PRIMARY KEY,user_id TEXT NOT NULL REFERENCES users(id),expires_at INTEGER NOT NULL);
  CREATE TABLE IF NOT EXISTS entries(id TEXT PRIMARY KEY,user_id TEXT NOT NULL REFERENCES users(id),body TEXT NOT NULL,occurred_at TEXT NOT NULL,deleted INTEGER NOT NULL DEFAULT 0);
  CREATE INDEX IF NOT EXISTS entries_user ON entries(user_id,deleted);
+ CREATE INDEX IF NOT EXISTS entries_page ON entries(user_id,deleted,occurred_at DESC,id DESC);
  CREATE TABLE IF NOT EXISTS create_requests(user_id TEXT NOT NULL REFERENCES users(id),request_key TEXT NOT NULL,request_hash TEXT NOT NULL,entry_body TEXT NOT NULL,PRIMARY KEY(user_id,request_key));
  CREATE TABLE IF NOT EXISTS audit(id TEXT PRIMARY KEY,user_id TEXT NOT NULL REFERENCES users(id),entry_id TEXT NOT NULL,action TEXT NOT NULL,at TEXT NOT NULL,before_body TEXT,after_body TEXT);
  CREATE INDEX IF NOT EXISTS audit_user ON audit(user_id,at);
@@ -152,6 +155,8 @@ func (a *app) handler() http.Handler {
 	mux.HandleFunc("POST /api/auth/verify", a.verifyCode)
 	mux.Handle("GET /api/me", a.auth(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { respond(w, 200, r.Context().Value(userKey)) })))
 	mux.Handle("POST /api/auth/logout", a.auth(http.HandlerFunc(a.logout)))
+	mux.Handle("GET /api/entries/page", a.auth(http.HandlerFunc(a.pageEntries)))
+	mux.Handle("GET /api/summary", a.auth(http.HandlerFunc(a.practiceSummary)))
 	mux.Handle("GET /api/entries", a.auth(http.HandlerFunc(a.listEntries)))
 	mux.Handle("POST /api/entries", a.auth(http.HandlerFunc(a.mutate)))
 	mux.Handle("PUT /api/entries/{id}", a.auth(http.HandlerFunc(a.mutate)))
@@ -162,8 +167,18 @@ func (a *app) handler() http.Handler {
 			internal(w, err)
 			return
 		}
-		respond(w, 200, map[string]string{"status": "ok", "emailMode": a.emailMode})
+		payload := map[string]any{"status": "ok", "emailMode": a.emailMode}
+		if a.mock {
+			payload["mock"] = true
+			payload["loginCode"] = mockLoginCode
+			payload["demoEmail"] = mockDemoEmail
+		}
+		respond(w, 200, payload)
 	})
+	if a.mock && !a.production {
+		mux.HandleFunc("POST /api/mock/reset", a.resetMock)
+		mux.HandleFunc("POST /api/mock/login", a.mockPasswordLogin)
+	}
 	mux.HandleFunc("/api/", func(w http.ResponseWriter, r *http.Request) { fail(w, 404, "Endpoint not found") })
 	files := http.FileServer(http.Dir("dist"))
 	mux.Handle("/", files)
@@ -195,7 +210,7 @@ func (a *app) handler() http.Handler {
 }
 func (a *app) auth(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		c, err := r.Cookie("karma_session")
+		c, err := r.Cookie(a.sessionCookieName())
 		if err != nil {
 			fail(w, 401, "Please sign in")
 			return
@@ -261,7 +276,7 @@ func (a *app) prepareCode(email, ip string) (int64, string, error) {
 	if err := a.db.QueryRow(`SELECT count(*) FROM codes WHERE ip=? AND created_at>?`, ip, t-3600).Scan(&ipCount); err != nil {
 		return 0, "", err
 	}
-	if emailCount >= 5 || ipCount >= 20 || t-latest < 60 {
+	if (a.production || a.emailMode != "log") && (emailCount >= 5 || ipCount >= 20 || t-latest < 60) {
 		return 0, "", errCodeRateLimited
 	}
 	n, err := rand.Int(rand.Reader, big.NewInt(1000000))
@@ -269,6 +284,9 @@ func (a *app) prepareCode(email, ip string) (int64, string, error) {
 		return 0, "", err
 	}
 	code := fmt.Sprintf("%06d", n.Int64())
+	if a.mock && !a.production {
+		code = mockLoginCode
+	}
 	tx, err := a.db.Begin()
 	if err != nil {
 		return 0, "", err
@@ -302,6 +320,16 @@ func (a *app) verifyCode(w http.ResponseWriter, r *http.Request) {
 	email, err := normalize(in.Email)
 	if err != nil || len(in.Code) != 6 {
 		fail(w, 401, "Invalid or expired code")
+		return
+	}
+	if a.mock && !a.production {
+		for _, digit := range in.Code {
+			if digit < '0' || digit > '9' {
+				fail(w, 401, "Enter any six-digit mock code")
+				return
+			}
+		}
+		a.mockSignIn(w, r, email)
 		return
 	}
 	a.mu.Lock()
@@ -356,16 +384,16 @@ func (a *app) verifyCode(w http.ResponseWriter, r *http.Request) {
 		internal(w, err)
 		return
 	}
-	http.SetCookie(w, &http.Cookie{Name: "karma_session", Value: session, Path: "/", HttpOnly: true, Secure: a.production, SameSite: http.SameSiteLaxMode, MaxAge: 30 * 86400})
+	http.SetCookie(w, &http.Cookie{Name: a.sessionCookieName(), Value: session, Path: "/", HttpOnly: true, Secure: a.production, SameSite: http.SameSiteLaxMode, MaxAge: 30 * 86400})
 	respond(w, 200, u)
 }
 func (a *app) logout(w http.ResponseWriter, r *http.Request) {
-	c, _ := r.Cookie("karma_session")
+	c, _ := r.Cookie(a.sessionCookieName())
 	if _, err := a.db.Exec(`DELETE FROM sessions WHERE hash=?`, digest(c.Value)); err != nil {
 		internal(w, err)
 		return
 	}
-	http.SetCookie(w, &http.Cookie{Name: "karma_session", Value: "", Path: "/", HttpOnly: true, Secure: a.production, SameSite: http.SameSiteLaxMode, MaxAge: -1})
+	http.SetCookie(w, &http.Cookie{Name: a.sessionCookieName(), Value: "", Path: "/", HttpOnly: true, Secure: a.production, SameSite: http.SameSiteLaxMode, MaxAge: -1})
 	respond(w, 200, map[string]bool{"ok": true})
 }
 func (a *app) listEntries(w http.ResponseWriter, r *http.Request) {
@@ -611,6 +639,14 @@ func getenv(k, v string) string {
 	return v
 }
 func main() {
+	mockMode := flag.Bool("mock", false, "Run a loopback-only mock API with disposable fixtures")
+	flag.Parse()
+	if *mockMode {
+		if err := runMock(); err != nil {
+			log.Fatal(err)
+		}
+		return
+	}
 	production := os.Getenv("APP_ENV") == "production"
 	secret := os.Getenv("SESSION_SECRET")
 	mode := getenv("EMAIL_MODE", "log")

@@ -10,17 +10,17 @@ function deferred<T>(){let resolve!:(v:T)=>void;const promise=new Promise<T>(r=>
 beforeEach(()=>store.dispatch(actions.signedOut()));
 afterEach(()=>{globalThis.fetch=originalFetch;store.dispatch(actions.signedOut())});
 
-test('late journal and audit responses cannot cross account boundaries',async()=>{
+test('late dashboard summaries cannot cross account boundaries',async()=>{
  store.dispatch(actions.signedIn(userA));
- const oldEntries=deferred<Response>(),oldAudit=deferred<Response>();
- globalThis.fetch=async path=>String(path).endsWith('/entries')?oldEntries.promise:oldAudit.promise;
+ const oldEntries=deferred<Response>();
+ globalThis.fetch=async path=>oldEntries.promise;
  const oldLoad=reload();
  store.dispatch(actions.signedOut());store.dispatch(actions.signedIn(userB));
  const b=entry('b-entry','b');
- globalThis.fetch=async path=>response(String(path).endsWith('/entries')?[b]:[audit(b)]);
+ globalThis.fetch=async path=>response(String(path).includes('/summary?')?[b]:[audit(b)]);
  await reload();
- const a=entry('a-entry','a');oldEntries.resolve(response([a]));oldAudit.resolve(response([audit(a)]));await oldLoad;
- assert.deepEqual(store.getState().entries,[b]);assert.deepEqual(store.getState().audit,[audit(b)]);assert.equal(store.getState().user?.id,'b');
+ const a=entry('a-entry','a');oldEntries.resolve(response([a]));await oldLoad;
+ assert.deepEqual(store.getState().entries,[b]);assert.deepEqual(store.getState().audit,[]);assert.equal(store.getState().user?.id,'b');
 });
 
 test('an obsolete 401 cannot sign out a newly authenticated user',async()=>{
@@ -44,7 +44,7 @@ test('a new session for the same account still invalidates previous requests',as
 
 test('a slower load cannot overwrite a newer load in the same session',async()=>{
  store.dispatch(actions.signedIn(userA));const first=deferred<Response>();globalThis.fetch=()=>first.promise;const oldLoad=reload();
- const fresh=entry('fresh','a');globalThis.fetch=async path=>response(String(path).endsWith('/entries')?[fresh]:[]);await reload();
+ const fresh=entry('fresh','a');globalThis.fetch=async path=>response(String(path).includes('/summary?')?[fresh]:[]);await reload();
  first.resolve(response([]));await oldLoad;assert.deepEqual(store.getState().entries,[fresh]);
 });
 
@@ -54,11 +54,11 @@ test('save commits and closes before refresh, and retrying a failed load never r
   if(options?.method==='POST'){posts++;assert.equal((options.headers as Record<string,string>)['Idempotency-Key'],'operation-1');return response({entry:saved},201)}
   assert.equal(closed,true,'Editor must close before refreshing');
   if(failRefresh)return response({error:'Temporarily unavailable'},503);
-  return response(String(path).endsWith('/entries')?[saved]:[audit(saved)]);
+  return response(String(path).includes('/summary?')?[saved]:[audit(saved)]);
  };
  await mutateJournal('/entries','POST',{},()=>{closed=true},'operation-1');
- assert.equal(closed,true);assert.equal(posts,1);assert.deepEqual(store.getState().entries,[saved]);assert.equal(store.getState().refreshError,'Temporarily unavailable');
- failRefresh=false;await reload();assert.equal(posts,1);assert.equal(store.getState().refreshError,'');assert.deepEqual(store.getState().audit,[audit(saved)]);
+ assert.equal(closed,true);assert.equal(posts,1);assert.deepEqual(store.getState().entries,[]);assert.equal(store.getState().refreshError,'Temporarily unavailable');
+ failRefresh=false;await reload();assert.equal(posts,1);assert.equal(store.getState().refreshError,'');assert.deepEqual(store.getState().audit,[]);
 });
 
 test('a failed mutation does not close the editor or refresh the journal',async()=>{

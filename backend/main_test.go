@@ -152,6 +152,7 @@ func TestOTPAttemptsAndExpiry(t *testing.T) {
 }
 func TestRateLimitAndFailedDelivery(t *testing.T) {
 	a, h, _ := fixture(t)
+	a.emailMode = "resend"
 	a.send = func(context.Context, string, string) error { return fmt.Errorf("service unavailable") }
 	w := call(h, "POST", "/api/auth/request", map[string]string{"email": "a@example.com"}, nil)
 	if w.Code != 502 {
@@ -510,5 +511,20 @@ func TestFailedAuditRollsBackIdempotencyKey(t *testing.T) {
 	}
 	if w := callWithKey(h, validEntry(), c, "retry-after-failure"); w.Code != 201 {
 		t.Fatal(w.Code, w.Body.String())
+	}
+}
+
+func TestLocalLogModeAllowsRepeatedCodeRequests(t *testing.T) {
+	a, h, codes := fixture(t)
+	a.emailMode = "log"
+	for i := 0; i < 8; i++ {
+		w := call(h, "POST", "/api/auth/request", map[string]string{"email": "local@example.com"}, nil)
+		if w.Code != 202 {
+			t.Fatalf("local request %d throttled: %d %s", i+1, w.Code, w.Body.String())
+		}
+	}
+	w := call(h, "POST", "/api/auth/verify", map[string]string{"email": "local@example.com", "code": codes["local@example.com"]}, nil)
+	if w.Code != 200 {
+		t.Fatal("latest local code should authenticate", w.Code, w.Body.String())
 	}
 }
