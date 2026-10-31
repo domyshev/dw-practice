@@ -136,3 +136,20 @@
 .menu-about-label{display:flex;align-items:center;gap:13px}
 .menu-about-label>.MuiSvgIcon-root{width:21px;height:24px;flex-shrink:0;color:var(--muted)}
 .app-menu .MuiList-root{padding-bottom:6px}
+
+/* Keep action controls compact without shrinking their labels excessively. */
+.MuiDialogActions-root .MuiButton-root{min-height:36px;padding:6px 12px;font-size:13px}
+.MuiDialogActions-root .MuiButton-startIcon>.MuiSvgIcon-root{font-size:18px}
+.row-actions .MuiIconButton-root{width:32px;height:32px;min-width:32px;min-height:32px;padding:6px}
+.row-actions .MuiSvgIcon-root{width:18px;height:18px}
+.row-actions button:focus-visible{outline-width:2px;outline-offset:2px}
+.about-dialog .MuiDialogTitle-root{padding-bottom:6px!important}
+.about-dialog .MuiDialogContent-root{padding-top:0!important}
+.about-content>img{margin-top:0}
+
+.period-trigger.MuiButton-root{padding:0 8px}
+.mock-badge.MuiChip-root{transform:translateY(4px)}
+.row-actions .MuiIconButton-root{width:28px;height:28px;min-width:28px;min-height:28px;padding:5px}
+.row-actions button:focus-visible,.header-right>button:focus-visible{outline-width:2px;outline-offset:1px}
+.header-right>.MuiIconButton-root{width:32px;height:32px;min-width:32px;min-height:32px;padding:5px}
+.header-right>.MuiIconButton-root>.MuiSvgIcon-root{width:22px;height:22px}
