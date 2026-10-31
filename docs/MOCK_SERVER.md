@@ -26,11 +26,13 @@ The mock UI is visibly labelled “Mock data”. Its login screen explains that 
 
 | Email | Code | Data |
 |---|---|---|
-| `demo@dwpractice.test` | `123456` | 14 active entries across four practices; four starting balances; activity over the last week; multiple IANA zones; 17 audit events including an edit and a deleted entry |
+| `demo@dwpractice.test` | `123456` | 1,014 active entries across four practices; four starting balances; activity over the last week; multiple IANA zones; 1,017 audit events including an edit and a deleted entry |
 | `second@dwpractice.test` | `123456` | A separate account with two entries and isolated history |
 | `empty@dwpractice.test` | `123456` | Created at first sign-in with no entries, for testing empty states |
 
 Other valid emails create separate empty mock accounts. No email is ever sent. Use reserved `.test` addresses for fixtures.
+
+The mock server also generates 1,000 deterministic demo practice records, four per day over approximately eight months, to exercise cursor pagination and virtual scrolling. They are inserted into the mock SQLite database and served through the same HTTP API as real records; the frontend does not manufacture them.
 
 Seed definitions are versioned in `backend/mockdata/seed.json` and embedded into the mock executable. Their IDs and counts are fixed, while dates are relative to server startup, keeping today's and weekly activity useful. `daysAgo`, `minutesAgo` and `timeZone` control dates; the default zone is `Europe/Madrid`. Included zones also cover `Asia/Kathmandu` and `America/New_York`. `editRepetitions` creates an update snapshot; `deleted` creates a soft deletion with a retained audit record. Restart the API after editing the seed file.
 

@@ -1,12 +1,14 @@
 import { configureStore, createSlice, type PayloadAction } from '@reduxjs/toolkit';
 import { useDispatch, useSelector } from 'react-redux';
+import {parseChartPeriod,type ChartPeriod} from './activity.ts';
+function storedPeriod():ChartPeriod{try{return parseChartPeriod(localStorage.getItem('dw-chart-period'))}catch{return 'week'}}
 export type Practice = 'prostrations' | 'diamond-mind' | 'mandala' | 'guru-yoga';
 export type Entry = {id:string;userId:string;practice:Practice;large:number;small:number;repetitions:number;total:number;initial:boolean;occurredAt:string;timeZone:string;offsetMinutes:number;note:string;createdAt:string;updatedAt:string;version:number};
 export type Audit = {id:string;entryId:string;action:string;at:string;before:Entry|null;after:Entry|null};
 export type User = {id:string;email:string};
 const slice = createSlice({
   name: 'practice',
-  initialState: {user:null as User|null, entries:[] as Entry[], audit:[] as Audit[], view:'overview', filter:'all', sessionGeneration:0, loadId:0, refreshError:''},
+  initialState: {user:null as User|null, entries:[] as Entry[], audit:[] as Audit[], view:'overview', filter:'all', chartPeriod:storedPeriod(), sessionGeneration:0, loadId:0, refreshError:'', revision:0},
   reducers: {
     signedIn(s, a:PayloadAction<User>) {
       s.user=a.payload; s.entries=[]; s.audit=[]; s.view='overview'; s.filter='all'; s.refreshError=''; s.sessionGeneration++; s.loadId=0;
@@ -19,18 +21,18 @@ const slice = createSlice({
     },
     loaded(s, a:PayloadAction<{generation:number;loadId:number;entries:Entry[];audit:Audit[]}>) {
       if (s.sessionGeneration!==a.payload.generation || s.loadId!==a.payload.loadId) return;
-      s.entries=a.payload.entries; s.audit=a.payload.audit; s.refreshError='';
+      s.entries=a.payload.entries; s.audit=a.payload.audit; s.refreshError=''; s.revision++;
     },
     loadFailed(s, a:PayloadAction<{generation:number;loadId:number;message:string}>) {
       if (s.sessionGeneration===a.payload.generation && s.loadId===a.payload.loadId) s.refreshError=a.payload.message;
     },
     committed(s, a:PayloadAction<{generation:number;id:string;entry:Entry|null}>) {
       if(s.sessionGeneration!==a.payload.generation) return;
-      s.entries=s.entries.filter(e=>e.id!==a.payload.id);
-      if(a.payload.entry) s.entries.push(a.payload.entry);
+      s.revision++;
       // Invalidate loads started before the mutation committed.
       s.loadId=0;
     },
+    setChartPeriod:(s,a:PayloadAction<ChartPeriod>)=>{s.chartPeriod=parseChartPeriod(a.payload)},
     navigate:(s,a:PayloadAction<string>)=>{s.view=a.payload;s.filter='all'},
     filter:(s,a:PayloadAction<string>)=>{s.filter=a.payload}
   }
@@ -44,7 +46,10 @@ export class SessionChangedError extends Error {
 }
 const pending=new Set<AbortController>();
 let observedGeneration=store.getState().sessionGeneration;
+let savedPeriod=store.getState().chartPeriod;
 store.subscribe(()=>{
+  const period=store.getState().chartPeriod;
+  if(period!==savedPeriod){savedPeriod=period;try{localStorage.setItem('dw-chart-period',period)}catch{}}
   const generation=store.getState().sessionGeneration;
   if(generation!==observedGeneration){observedGeneration=generation;for(const controller of pending)controller.abort();pending.clear();}
 });
@@ -69,7 +74,8 @@ export async function reload():Promise<void>{
   const {user,sessionGeneration:generation}=store.getState();if(!user)return;
   const loadId=++loadSequence;store.dispatch(actions.loading({generation,loadId}));
   try {
-    const [entries,audit]=await Promise.all([api<Entry[]>('/entries'),api<Audit[]>('/audit')]);
+    const entries=await api<Entry[]>(`/summary?timeZone=${encodeURIComponent(Intl.DateTimeFormat().resolvedOptions().timeZone)}`);
+    const audit:Audit[]=[];
     store.dispatch(actions.loaded({generation,loadId,entries,audit}));
   } catch(error) {
     store.dispatch(actions.loadFailed({generation,loadId,message:(error as Error).message}));

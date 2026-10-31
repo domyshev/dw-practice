@@ -51,8 +51,8 @@ func TestMockHealthAndSeededJournal(t *testing.T) {
 	}
 	c := mockLogin(t, h, mockDemoEmail)
 	entries := mockEntries(t, h, c)
-	if len(entries) != 14 {
-		t.Fatal("expected 14 active demo entries", len(entries))
+	if len(entries) != 14+mockGeneratedEntries {
+		t.Fatal("expected base scenarios and 1,000 generated demo entries", len(entries))
 	}
 	seen := map[string]bool{}
 	initial := 0
@@ -80,7 +80,7 @@ func TestMockHealthAndSeededJournal(t *testing.T) {
 	}
 	var history []audit
 	_ = json.Unmarshal(call(h, "GET", "/api/audit", nil, c).Body.Bytes(), &history)
-	if len(history) != 17 {
+	if len(history) != 17+mockGeneratedEntries {
 		t.Fatal("expected creation/update/deletion events", len(history))
 	}
 	actions := map[string]bool{}
@@ -97,7 +97,7 @@ func TestMockAccountIsolationAndEmptyAccount(t *testing.T) {
 	demo := mockLogin(t, h, mockDemoEmail)
 	second := mockLogin(t, h, "second@dwpractice.test")
 	empty := mockLogin(t, h, "empty@dwpractice.test")
-	if len(mockEntries(t, h, demo)) != 14 || len(mockEntries(t, h, second)) != 2 || len(mockEntries(t, h, empty)) != 0 {
+	if len(mockEntries(t, h, demo)) != 14+mockGeneratedEntries || len(mockEntries(t, h, second)) != 2 || len(mockEntries(t, h, empty)) != 0 {
 		t.Fatal("incorrect account fixtures")
 	}
 	for _, e := range mockEntries(t, h, second) {
@@ -173,7 +173,7 @@ func TestMockResetRestoresFixturesAndInvalidatesSessions(t *testing.T) {
 	a, h := mockFixture(t)
 	c := mockLogin(t, h, mockDemoEmail)
 	e := create(t, h, c, validEntry())
-	if len(mockEntries(t, h, c)) != 15 {
+	if len(mockEntries(t, h, c)) != 15+mockGeneratedEntries {
 		t.Fatal("entry was not created")
 	}
 	if w := call(h, "POST", "/api/mock/reset", map[string]any{}, nil); w.Code != 200 {
@@ -184,7 +184,7 @@ func TestMockResetRestoresFixturesAndInvalidatesSessions(t *testing.T) {
 	}
 	c = mockLogin(t, h, mockDemoEmail)
 	entries := mockEntries(t, h, c)
-	if len(entries) != 14 {
+	if len(entries) != 14+mockGeneratedEntries {
 		t.Fatal("fixtures not restored")
 	}
 	for _, v := range entries {

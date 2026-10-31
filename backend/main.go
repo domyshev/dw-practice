@@ -137,6 +137,7 @@ func openDB(path string) (*sql.DB, error) {
  CREATE TABLE IF NOT EXISTS sessions(hash TEXT PRIMARY KEY,user_id TEXT NOT NULL REFERENCES users(id),expires_at INTEGER NOT NULL);
  CREATE TABLE IF NOT EXISTS entries(id TEXT PRIMARY KEY,user_id TEXT NOT NULL REFERENCES users(id),body TEXT NOT NULL,occurred_at TEXT NOT NULL,deleted INTEGER NOT NULL DEFAULT 0);
  CREATE INDEX IF NOT EXISTS entries_user ON entries(user_id,deleted);
+ CREATE INDEX IF NOT EXISTS entries_page ON entries(user_id,deleted,occurred_at DESC,id DESC);
  CREATE TABLE IF NOT EXISTS create_requests(user_id TEXT NOT NULL REFERENCES users(id),request_key TEXT NOT NULL,request_hash TEXT NOT NULL,entry_body TEXT NOT NULL,PRIMARY KEY(user_id,request_key));
  CREATE TABLE IF NOT EXISTS audit(id TEXT PRIMARY KEY,user_id TEXT NOT NULL REFERENCES users(id),entry_id TEXT NOT NULL,action TEXT NOT NULL,at TEXT NOT NULL,before_body TEXT,after_body TEXT);
  CREATE INDEX IF NOT EXISTS audit_user ON audit(user_id,at);
@@ -154,6 +155,8 @@ func (a *app) handler() http.Handler {
 	mux.HandleFunc("POST /api/auth/verify", a.verifyCode)
 	mux.Handle("GET /api/me", a.auth(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { respond(w, 200, r.Context().Value(userKey)) })))
 	mux.Handle("POST /api/auth/logout", a.auth(http.HandlerFunc(a.logout)))
+	mux.Handle("GET /api/entries/page", a.auth(http.HandlerFunc(a.pageEntries)))
+	mux.Handle("GET /api/summary", a.auth(http.HandlerFunc(a.practiceSummary)))
 	mux.Handle("GET /api/entries", a.auth(http.HandlerFunc(a.listEntries)))
 	mux.Handle("POST /api/entries", a.auth(http.HandlerFunc(a.mutate)))
 	mux.Handle("PUT /api/entries/{id}", a.auth(http.HandlerFunc(a.mutate)))

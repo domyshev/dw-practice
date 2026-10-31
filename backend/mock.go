@@ -19,6 +19,7 @@ import (
 )
 
 const mockLoginCode = "123456"
+const mockGeneratedEntries = 1000
 const mockDemoEmail = "demo@dwpractice.test"
 
 //go:embed mockdata/seed.json
@@ -84,6 +85,25 @@ func (a *app) resetMockData() error {
 	if err := json.Unmarshal(mockSeed, &fixtures); err != nil {
 		return err
 	}
+
+	// Keep the handwritten edge cases and add a deterministic large feed for scroll checks.
+	for i := range fixtures.Users {
+		if fixtures.Users[i].Email != mockDemoEmail {
+			continue
+		}
+		practiceIDs := []string{"prostrations", "diamond-mind", "mandala", "guru-yoga"}
+		for n := 0; n < mockGeneratedEntries; n++ {
+			e := mockEntry{ID: fmt.Sprintf("demo-scroll-%04d", n+1), Practice: practiceIDs[n%4], Large: 1 + (n/4)%3, Small: n % 3, Repetitions: n % 11, DaysAgo: 10 + n/4, MinutesAgo: (n % 4) * 75}
+			if n%7 == 0 {
+				e.Note = fmt.Sprintf("Example session %d", n+1)
+			}
+			if n%13 == 0 {
+				e.TimeZone = "Asia/Kathmandu"
+			}
+			fixtures.Users[i].Entries = append(fixtures.Users[i].Entries, e)
+		}
+	}
+
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	tx, err := a.db.Begin()
