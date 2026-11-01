@@ -1,5 +1,6 @@
 import { configureStore, createSlice, type PayloadAction } from '@reduxjs/toolkit';
 import { useDispatch, useSelector } from 'react-redux';
+import {requestJSON} from './http.ts';
 import {parseChartPeriod,type ChartPeriod} from './activity.ts';
 function storedPeriod():ChartPeriod{try{return parseChartPeriod(localStorage.getItem('dw-chart-period'))}catch{return 'week'}}
 export type Practice = 'prostrations' | 'diamond-mind' | 'mandala' | 'guru-yoga';
@@ -57,13 +58,12 @@ export async function api<T>(path:string,method='GET',body?:unknown,idempotencyK
   const generation=store.getState().sessionGeneration;
   const controller=new AbortController();pending.add(controller);
   try {
-    const r=await fetch(`/api${path}`,{method,credentials:'same-origin',signal:controller.signal,
-      headers:{...(method!=='GET'?{'Content-Type':'application/json'}:{}),...(idempotencyKey?{'Idempotency-Key':idempotencyKey}:{})},
-      body:body===undefined?undefined:JSON.stringify(body)});
-    const data=await r.json();
+    const r=await requestJSON(path,{method,signal:controller.signal,
+      headers:{...(method!=='GET'?{'Content-Type':'application/json'}:{}),...(idempotencyKey?{'Idempotency-Key':idempotencyKey}:{})},body});
+    const data=r.data as {error?:string};
     if(generation!==store.getState().sessionGeneration)throw new SessionChangedError();
     if(!r.ok){if(r.status===401&&store.getState().user)store.dispatch(actions.signedOut());throw new Error(data.error||'Unable to complete the request');}
-    return data;
+    return data as T;
   } catch(error) {
     if(generation!==store.getState().sessionGeneration)throw new SessionChangedError();
     throw error;

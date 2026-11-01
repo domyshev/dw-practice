@@ -67,7 +67,7 @@ Backend integration tests use isolated temporary SQLite databases and cover arit
 
 Browser verification: request and verify a local sign-in code, open the journal, save 2 large malas + 1 small mala + 4 repetitions, confirm 247 repetitions and the original device zone in history, inspect the created audit event, add a 1,000-repetition starting balance and confirm lifetime total 1,247 while today/weekly totals remain 247. Browser QA uses a disposable account in a separate preview database outside the deliverable. Real Resend delivery and Docker deployment require external configuration and were not tested.
 
-See `docs/API.md` for the HTTP contract. The iPhone roadmap is recorded separately in Russian as requested.
+See `docs/API.md` for the HTTP contract. The installable iPhone application and simulator/device workflows are documented in `docs/IOS.md`.
 
 ## Brand assets
 
@@ -82,3 +82,9 @@ History is the audit stream, including creation, edits, deletion and starting ba
 Browser layout checks used 430×932 (iPhone 15 Pro Max CSS viewport), 390×844 and 320×740 viewports. These are browser viewport checks, not physical-device certification. Export regression tests cover quoting, user text, deleted records, before/after data, workbook readback and empty journals.
 
 The compact practice cards provide the only Add practice actions. Their editor fixes the selected practice, uses plus/minus controls for mala counts and shows the total as a formula. Starting balances are entered separately from the menu with editable numeric counts. The activity chart stacks repetitions by practice using a pastel yellow/orange palette. Its period menu selects the last seven days, current calendar month/quarter/year, or previous calendar year. Month uses weekly buckets and quarter/year use monthly buckets. The legend includes per-practice totals for the selected period; starting balances remain excluded. Each practice has its own fixed goal of 111,111 repetitions. Recent-entry time zones are revealed by hover, focus or a tap/click on the recorded date rather than a second visible line.
+
+## iPhone application
+
+The `ios/` Xcode project bundles the React frontend with Capacitor. Go remains the backend. Native URLSession handles API requests and session cookies; exports use the iOS share sheet, external links open Safari View Controller, and screens account for safe areas and keyboard resizing.
+
+For the local simulator: keep the mock API running on 8081, run `npm run ios:mock`, `npm run ios:build`, then `npm run ios:run` with an iPhone simulator booted. `npm run ios:open` opens the project in Xcode. For a device/production build, use `VITE_NATIVE_API_URL=https://your-server.example npm run ios:prepare` and configure your Apple signing team. Release builds refuse mock bundles. See [iPhone setup and limitations](docs/IOS.md).

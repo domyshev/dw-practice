@@ -153,3 +153,10 @@
 .row-actions button:focus-visible,.header-right>button:focus-visible{outline-width:2px;outline-offset:1px}
 .header-right>.MuiIconButton-root{width:32px;height:32px;min-width:32px;min-height:32px;padding:5px}
 .header-right>.MuiIconButton-root>.MuiSvgIcon-root{width:22px;height:22px}
+
+/* iOS WebView uses the same screens, with room for the status bar and home indicator. */
+:root[data-platform=ios] .app-header{padding-top:calc(12px + env(safe-area-inset-top));padding-left:calc(16px + env(safe-area-inset-left));padding-right:calc(16px + env(safe-area-inset-right))}
+:root[data-platform=ios] .content{padding-bottom:calc(8px + env(safe-area-inset-bottom))}
+:root[data-platform=ios] .MuiDialog-paper{max-height:calc(100dvh - env(safe-area-inset-top) - env(safe-area-inset-bottom) - 24px)!important;margin-top:calc(12px + env(safe-area-inset-top))!important;margin-bottom:calc(12px + env(safe-area-inset-bottom))!important}
+:root[data-platform=ios] input,:root[data-platform=ios] textarea{font-size:16px}
+:root[data-platform=ios] .virtual-feed{-webkit-overflow-scrolling:touch}

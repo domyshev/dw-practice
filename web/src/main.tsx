@@ -10,7 +10,9 @@ import {practiceColors} from './week';
 import {practiceActivity,chartPeriods,PRACTICE_GOAL} from './activity';
 import {PracticeFeed} from './feed';
 import {version as appVersion} from '../../package.json';
+import {initializeNative} from './native';
 import './style.css';
+initializeNative();
 const practices:{id:Practice;name:string;subtitle:string;color:string;soft:string;symbol:string}[]=[
  {id:'prostrations',name:'Prostrations',subtitle:'Taking refuge',color:'#557760',soft:'#edf2e9',symbol:'◠'},
  {id:'diamond-mind',name:'Diamond Mind',subtitle:'Purification',color:'#698f9c',soft:'#eaf2f4',symbol:'◇'},
