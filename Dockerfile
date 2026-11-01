@@ -4,7 +4,8 @@ COPY package.json package-lock.json ./
 RUN npm ci
 COPY tsconfig.json vite.config.ts ./
 COPY web ./web
-RUN npm run build
+ARG APP_COMMIT=unknown
+RUN npm run build && node -e 'require("fs").writeFileSync("dist/deployment.json", JSON.stringify({commit:process.env.APP_COMMIT}))'
 
 FROM golang:1.25-alpine AS api
 WORKDIR /src
@@ -14,6 +15,9 @@ COPY backend ./backend
 RUN CGO_ENABLED=0 go build -trimpath -o /karma ./backend
 
 FROM alpine:3.22
+ARG APP_COMMIT=unknown
+LABEL org.opencontainers.image.revision=$APP_COMMIT
+LABEL org.opencontainers.image.source="https://github.com/domyshev/dw-practice"
 RUN apk add --no-cache ca-certificates && addgroup -g 10001 karma && adduser -D -u 10001 -G karma karma
 WORKDIR /app
 COPY --from=api /karma /app/karma

@@ -47,9 +47,9 @@ Codes expire after 10 minutes, are stored as HMAC digests, are consumed atomical
 
 Production requires `APP_ENV=production`, `EMAIL_MODE=resend`, `SESSION_SECRET` of at least 32 random characters, `RESEND_API_KEY`, `EMAIL_FROM`, and an HTTPS `APP_ORIGIN`. Production refuses to start with development settings. Log delivery can bind only to loopback. The server serves the built React app from `dist/`.
 
-A Dockerfile is included (not executed in this environment). Build with `docker build -t karma-practice .`. Supply the production variables, publish port 8080 behind an HTTPS reverse proxy, and mount persistent storage at `/app/data`. Back up SQLite using its backup API or `sqlite3 data/karma.db ".backup backup.db"`; do not copy a live main DB without accounting for WAL. Database directory permissions should remain restricted.
+A production Dockerfile is included. Build with `docker build -t karma-practice .`. Supply the production variables, publish port 8080 behind an HTTPS reverse proxy, and mount persistent storage at `/app/data`. Back up SQLite using its backup API or `sqlite3 data/karma.db ".backup backup.db"`; do not copy a live main DB without accounting for WAL. Database directory permissions should remain restricted.
 
-This first version is intended for one Go service instance with a persistent SQLite volume. Before a public cloud launch, configure a verified email domain, HTTPS, backups/restore, monitoring, retention/account deletion, and privacy terms. Requests behind a reverse proxy currently share the proxy socket IP for the IP rate limit; forwarded headers are deliberately not trusted. Configure trusted-proxy handling and a shared rate limiter before scaling. Larger-scale storage can migrate to PostgreSQL without changing the web/iPhone API. There is no offline sync, mobile app, or public deployment in this version.
+This first version is intended for one Go service instance with a persistent SQLite volume. Before a public cloud launch, configure a verified email domain, HTTPS, backups/restore, monitoring, retention/account deletion, and privacy terms. Requests behind a reverse proxy currently share the proxy socket IP for the IP rate limit; forwarded headers are deliberately not trusted. Configure trusted-proxy handling and a shared rate limiter before scaling. Larger-scale storage can migrate to PostgreSQL without changing the web/iPhone API. Offline sync is not implemented. The web app is deployed at https://dw.domyshev.com/; the separate iPhone project requires signing and installation.
 
 ## Verification
 
@@ -88,3 +88,10 @@ The compact practice cards provide the only Add practice actions. Their editor f
 The `ios/` Xcode project bundles the React frontend with Capacitor. Go remains the backend. Native URLSession handles API requests and session cookies; exports use the iOS share sheet, external links open Safari View Controller, and screens account for safe areas and keyboard resizing.
 
 For the local simulator: keep the mock API running on 8081, run `npm run ios:mock`, `npm run ios:build`, then `npm run ios:run` with an iPhone simulator booted. `npm run ios:open` opens the project in Xcode. For a device/production build, use `VITE_NATIVE_API_URL=https://your-server.example npm run ios:prepare` and configure your Apple signing team. Release builds refuse mock bundles. See [iPhone setup and limitations](docs/IOS.md).
+
+## Automatic web deployment
+
+Pushes to `main` are tested and built on a standard GitHub-hosted Linux runner.
+Kai pulls the tested image, backs up SQLite, checks the replacement and rolls
+back on failure. A `deploy-web-*` Git tag marks the exact commit only after the
+public site confirms it. See [deployment details](docs/DEPLOYMENT.md).

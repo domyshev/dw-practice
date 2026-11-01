@@ -1,0 +1,80 @@
+name: Deploy web
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: dw-web-main
+  cancel-in-progress: false
+jobs:
+  release:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '24'
+          cache: npm
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff
+        with:
+          go-version: '1.25.x'
+          cache: true
+      - name: Test the application
+        run: |
+          npm ci
+          npm test
+          npm run build
+          go test -race -count=1 ./...
+          go vet ./...
+      - name: Build the production image
+        run: |
+          docker build --build-arg APP_COMMIT="$GITHUB_SHA" --tag "dw-practice:$GITHUB_SHA" .
+          docker run --rm --entrypoint /bin/sh "dw-practice:$GITHUB_SHA" -c 'test -x /app/karma && test -s /app/dist/deployment.json'
+      - name: Publish an immutable public image archive
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -eu
+          if [ "$(gh api "repos/$GITHUB_REPOSITORY/commits/main" --jq .sha)" != "$GITHUB_SHA" ]; then
+            echo 'Main advanced; its newer workflow will publish the next release.'
+            exit 0
+          fi
+          if ! gh release view "web-$GITHUB_SHA" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            docker save "dw-practice:$GITHUB_SHA" | gzip -1 > web-image.tar.gz
+            node --input-type=module <<'JS'
+          import fs from 'node:fs';
+          import crypto from 'node:crypto';
+          const sha256=crypto.createHash('sha256').update(fs.readFileSync('web-image.tar.gz')).digest('hex');
+          fs.writeFileSync('deployment.json',JSON.stringify({schema:1,commit:process.env.GITHUB_SHA,image:`dw-practice:${process.env.GITHUB_SHA}`,sha256,runId:process.env.GITHUB_RUN_ID},null,2));
+          JS
+            gh release create "web-$GITHUB_SHA" web-image.tar.gz deployment.json --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --title "Web build $GITHUB_SHA" --notes 'Tested production web image. The deployment tag is added only after Kai reports this commit healthy.' --latest
+          fi
+      - name: Verify Kai and tag the successful deployment
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -eu
+          for attempt in $(seq 1 100); do
+            current=$(gh api "repos/$GITHUB_REPOSITORY/commits/main" --jq .sha)
+            if [ "$current" != "$GITHUB_SHA" ]; then
+              echo 'Superseded by a newer main commit.'
+              exit 0
+            fi
+            if curl --fail --silent --show-error --max-time 10 "https://dw.domyshev.com/deployment.json?expected=$GITHUB_SHA&attempt=$attempt" > live.json && node --input-type=module -e 'import fs from "node:fs"; if(JSON.parse(fs.readFileSync("live.json")).commit!==process.env.GITHUB_SHA)process.exit(1)' && curl --fail --silent --show-error --max-time 10 https://dw.domyshev.com/api/health > health.json && node --input-type=module -e 'import fs from "node:fs";const h=JSON.parse(fs.readFileSync("health.json"));if(h.status!=="ok"||h.mock||h.emailMode!=="resend")process.exit(1)'; then
+              tag="deploy-web-$(date -u +%Y%m%dT%H%M%SZ)-${GITHUB_SHA:0:12}"
+              gh api --method POST "repos/$GITHUB_REPOSITORY/git/refs" -f "ref=refs/tags/$tag" -f "sha=$GITHUB_SHA"
+              printf '### Web deployment verified\n\nCommit: `%s`\n\nTag: `%s`\n\nURL: https://dw.domyshev.com/\n' "$GITHUB_SHA" "$tag" >> "$GITHUB_STEP_SUMMARY"
+              exit 0
+            fi
+            sleep 6
+          done
+          echo 'Kai did not confirm this release; no successful-deployment tag was created.' >&2
+          exit 1
