@@ -1,3 +1,4 @@
+import {isNative,shareExport} from './native.ts';
 import type {Entry,Audit,User} from './store.ts';
 export type ExportFormat='tsv'|'csv'|'xlsx';
 export type Cell=string|number|boolean;
@@ -34,8 +35,10 @@ export async function workbookBytes(tables:ExportTable[]):Promise<Uint8Array>{
 export async function downloadJournal(format:ExportFormat,entries:Entry[],audit:Audit[],user:User):Promise<void>{
  const tables=journalTables(entries,audit,user);
  const payload=format==='xlsx'?await workbookBytes(tables):delimitedTable(tables[1],format==='tsv'?'\t':',');
+ const filename=`dw-practice-history-${new Date().toISOString().slice(0,10)}.${format}`;
+ if(isNative()){await shareExport(filename,payload);return}
  const type=format==='xlsx'?'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet':format==='tsv'?'text/tab-separated-values;charset=utf-8':'text/csv;charset=utf-8';
  const blob=new Blob([payload as BlobPart],{type});const url=URL.createObjectURL(blob);
- const link=document.createElement('a');link.href=url;link.download=`dw-practice-history-${new Date().toISOString().slice(0,10)}.${format}`;
+ const link=document.createElement('a');link.href=url;link.download=filename;
  document.body.append(link);link.click();link.remove();setTimeout(()=>URL.revokeObjectURL(url),1000);
 }
