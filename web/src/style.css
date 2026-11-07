@@ -160,3 +160,12 @@
 :root[data-platform=ios] .MuiDialog-paper{max-height:calc(100dvh - env(safe-area-inset-top) - env(safe-area-inset-bottom) - 24px)!important;margin-top:calc(12px + env(safe-area-inset-top))!important;margin-bottom:calc(12px + env(safe-area-inset-bottom))!important}
 :root[data-platform=ios] input,:root[data-platform=ios] textarea{font-size:16px}
 :root[data-platform=ios] .virtual-feed{-webkit-overflow-scrolling:touch}
+
+/* Completion bars indicate presence, independently of repetition totals. */
+.chart-track{gap:2px}
+.completion-bar{display:block;align-self:stretch;flex:1;max-width:16px;min-width:3px;border-radius:5px 5px 0 0}
+.chart-track .stacked-bar{flex:1;min-width:3px}
+.app-menu .MuiMenuItem-root{align-items:center;line-height:1.4}
+.menu-item-label{display:block;line-height:1.4}
+.sign-out-label{display:flex;flex-direction:column;align-items:flex-start;min-width:0;padding:6px 0;line-height:1.4}
+.sign-out-email{max-width:100%;overflow:hidden;text-overflow:ellipsis;color:var(--muted);font-size:11px;white-space:nowrap}

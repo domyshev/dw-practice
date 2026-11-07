@@ -13,3 +13,7 @@ Use `npm ci` to install frontend dependencies. Use `npm run dev:mock` for isolat
 - Run the checks appropriate to the change: `npm test`, `go test -race -count=1 ./...`, `go vet ./...`, `npm run build`.
 
 Fixture definitions, custom ports and the mock-only reset endpoint are documented in `docs/MOCK_SERVER.md`.
+
+# Release versioning
+
+Before each production deployment, increment the patch component of the version in `package.json` and `package-lock.json` by one (for example, `0.1.0` to `0.1.1`). Increment the minor component only when the patch component cannot be increased, resetting the patch component to zero. Version components are integers, so `0.1.9` is followed by `0.1.10`; nine is not a limit. Keep the displayed version synchronized with these files.

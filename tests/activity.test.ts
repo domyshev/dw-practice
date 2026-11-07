@@ -28,3 +28,12 @@ test('Redux persists period changes without persisting account data and retains 
  try{store.dispatch(actions.setChartPeriod('quarter'));assert.equal(saved.get('dw-chart-period'),'quarter');store.dispatch(actions.signedOut());assert.equal(store.getState().chartPeriod,'quarter');assert.deepEqual([...saved.keys()],['dw-chart-period'])}
  finally{if(previous)Object.defineProperty(globalThis,'localStorage',previous);else Reflect.deleteProperty(globalThis,'localStorage');store.dispatch(actions.setChartPeriod('week'))}
 });
+test('completion meditations mark each period without adding repetitions',()=>{
+ const data:Entry[]=[entry('2026-10-31T12:00:00Z',12),{...entry('2026-10-31T10:00:00Z',0),practice:'16th-karmapa'},{...entry('2026-10-31T11:00:00Z',0),practice:'8th-karmapa'},{...entry('2026-10-31T11:30:00Z',0),practice:'8th-karmapa'}];
+ for(const period of ['week','month','quarter','year'] as const){
+  const result=practiceActivity(data,period,'UTC',new Date('2026-10-31T20:00:00Z'));
+  const bucket=result.buckets.find(b=>b.key<='2026-10-31'&&b.endKey>='2026-10-31')!;
+  assert.deepEqual(bucket.completions,{'16th-karmapa':true,'8th-karmapa':true});assert.equal(bucket.total,12);assert.equal(result.total,12);
+  assert.ok(result.buckets.filter(b=>b!==bucket).every(b=>!b.completions['16th-karmapa']&&!b.completions['8th-karmapa']));
+ }
+});

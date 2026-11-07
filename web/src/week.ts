@@ -1,5 +1,5 @@
 import type {Entry,Practice} from './store.ts';
-export const practiceColors:Record<Practice,string>={prostrations:'#efd18a','diamond-mind':'#e9b06d',mandala:'#efc3a4','guru-yoga':'#d99c77','16th-karmapa':'#c48665','8th-karmapa':'#b06b5a'};
+export const practiceColors:Record<Practice,string>={prostrations:'#efd18a','diamond-mind':'#e9b06d',mandala:'#efc3a4','guru-yoga':'#d99c77','16th-karmapa':'#31588c','8th-karmapa':'#843d86'};
 export function weeklyPractice(entries:Entry[],dates:Date[],timeZone:string){
  const key=(date:Date)=>new Intl.DateTimeFormat('en-CA',{timeZone,year:'numeric',month:'2-digit',day:'2-digit'}).format(date);
  return dates.map(date=>{
