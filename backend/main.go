@@ -642,6 +642,15 @@ func getenv(k, v string) string {
 	}
 	return v
 }
+func practiceSender(value string) (string, error) {
+	address, err := mail.ParseAddress(value)
+	if err != nil {
+		return "", err
+	}
+	address.Name = "DW Practice"
+	return address.String(), nil
+}
+
 func main() {
 	mockMode := flag.Bool("mock", false, "Run a loopback-only mock API with disposable fixtures")
 	flag.Parse()
@@ -670,6 +679,14 @@ func main() {
 	if _, err := url.ParseRequestURI(origin); err != nil {
 		log.Fatal("Invalid APP_ORIGIN")
 	}
+	sender := ""
+	if mode == "resend" {
+		var err error
+		sender, err = practiceSender(os.Getenv("EMAIL_FROM"))
+		if err != nil {
+			log.Fatal("EMAIL_FROM must contain a valid email address")
+		}
+	}
 	path := getenv("DATABASE_PATH", "data/karma.db")
 	if err := os.MkdirAll(filepath.Dir(path), 0700); err != nil {
 		log.Fatal(err)
@@ -686,7 +703,7 @@ func main() {
 			log.Printf("DEVELOPMENT ONLY — sign-in code for %s: %s", email, code)
 			return nil
 		}
-		body, _ := json.Marshal(map[string]any{"from": os.Getenv("EMAIL_FROM"), "to": []string{email}, "subject": "Your Karma sign-in code", "text": "Your sign-in code is " + code + ". It expires in 10 minutes. If you did not request it, ignore this email."})
+		body, _ := json.Marshal(map[string]any{"from": sender, "to": []string{email}, "subject": "Your DW Practice sign-in code", "text": "Your sign-in code is " + code + ". It expires in 10 minutes. If you did not request it, ignore this email."})
 		req, err := http.NewRequestWithContext(ctx, "POST", "https://api.resend.com/emails", bytes.NewReader(body))
 		if err != nil {
 			return err

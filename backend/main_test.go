@@ -553,3 +553,15 @@ func TestCompletionMeditations(t *testing.T) {
 		}
 	}
 }
+
+func TestPracticeSender(t *testing.T) {
+	for _, input := range []string{"Road Rules Trainer <login@example.com>", "login@example.com"} {
+		got, err := practiceSender(input)
+		if err != nil || got != "\"DW Practice\" <login@example.com>" {
+			t.Fatalf("sender = %q, error = %v", got, err)
+		}
+	}
+	if _, err := practiceSender("not an email"); err == nil {
+		t.Fatal("accepted invalid sender")
+	}
+}
