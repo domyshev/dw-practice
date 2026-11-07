@@ -72,7 +72,7 @@ type key int
 
 const userKey key = 1
 
-var practices = map[string]bool{"prostrations": true, "diamond-mind": true, "mandala": true, "guru-yoga": true}
+var practices = map[string]bool{"prostrations": true, "diamond-mind": true, "mandala": true, "guru-yoga": true, "16th-karmapa": true, "8th-karmapa": true}
 
 func token() string {
 	b := make([]byte, 32)
@@ -426,13 +426,17 @@ func (a *app) listEntries(w http.ResponseWriter, r *http.Request) {
 }
 func validate(e *entry) error {
 	if !practices[e.Practice] {
-		return errors.New("Choose one of the four practices")
+		return errors.New("Choose a valid practice")
 	}
 	if e.Large < 0 || e.Small < 0 || e.Repetitions < 0 || e.Large > 1000000 || e.Small > 1000000 || e.Repetitions > 100000000 {
 		return errors.New("Counts must be non-negative whole numbers within the allowed range")
 	}
 	e.Total = e.Large*108 + e.Small*27 + e.Repetitions
-	if e.Total == 0 {
+	if e.Practice == "16th-karmapa" || e.Practice == "8th-karmapa" {
+		if e.Total != 0 || e.Initial {
+			return errors.New("This meditation records completion without counts or starting balance")
+		}
+	} else if e.Total == 0 {
 		return errors.New("Add at least one repetition")
 	}
 	if len(e.Note) > 2000 {

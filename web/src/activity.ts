@@ -9,7 +9,7 @@ export const chartPeriods=[
 ] as const;
 export type ChartPeriod=typeof chartPeriods[number]['id'];
 export function parseChartPeriod(value:unknown):ChartPeriod{return chartPeriods.some(p=>p.id===value)?value as ChartPeriod:'week'}
-const emptyCounts=():Record<Practice,number>=>({prostrations:0,'diamond-mind':0,mandala:0,'guru-yoga':0});
+const emptyCounts=():Record<Practice,number>=>({prostrations:0,'diamond-mind':0,mandala:0,'guru-yoga':0,'16th-karmapa':0,'8th-karmapa':0});
 const dayMs=86400000;
 const key=(serial:number)=>new Date(serial*dayMs).toISOString().slice(0,10);
 const serial=(year:number,month:number,day:number)=>Date.UTC(year,month,day)/dayMs;

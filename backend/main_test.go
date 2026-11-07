@@ -528,3 +528,28 @@ func TestLocalLogModeAllowsRepeatedCodeRequests(t *testing.T) {
 		t.Fatal("latest local code should authenticate", w.Code, w.Body.String())
 	}
 }
+
+func TestCompletionMeditations(t *testing.T) {
+	_, h, codes := fixture(t)
+	cookie := login(t, h, codes, "meditations@example.com")
+	for _, practice := range []string{"16th-karmapa", "8th-karmapa"} {
+		e := validEntry()
+		e.Practice = practice
+		e.Large = 0
+		e.Small = 0
+		e.Repetitions = 0
+		saved := create(t, h, cookie, e)
+		if saved.Total != 0 || saved.OccurredAt != e.OccurredAt || saved.TimeZone != e.TimeZone {
+			t.Fatalf("incorrect completion: %+v", saved)
+		}
+		e.Repetitions = 1
+		if w := call(h, "POST", "/api/entries", e, cookie); w.Code != 422 {
+			t.Fatalf("accepted count: %d", w.Code)
+		}
+		e.Repetitions = 0
+		e.Initial = true
+		if w := call(h, "POST", "/api/entries", e, cookie); w.Code != 422 {
+			t.Fatalf("accepted starting balance: %d", w.Code)
+		}
+	}
+}

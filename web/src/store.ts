@@ -3,7 +3,7 @@ import { useDispatch, useSelector } from 'react-redux';
 import {requestJSON} from './http.ts';
 import {parseChartPeriod,type ChartPeriod} from './activity.ts';
 function storedPeriod():ChartPeriod{try{return parseChartPeriod(localStorage.getItem('dw-chart-period'))}catch{return 'week'}}
-export type Practice = 'prostrations' | 'diamond-mind' | 'mandala' | 'guru-yoga';
+export type Practice = 'prostrations' | 'diamond-mind' | 'mandala' | 'guru-yoga' | '16th-karmapa' | '8th-karmapa';
 export type Entry = {id:string;userId:string;practice:Practice;large:number;small:number;repetitions:number;total:number;initial:boolean;occurredAt:string;timeZone:string;offsetMinutes:number;note:string;createdAt:string;updatedAt:string;version:number};
 export type Audit = {id:string;entryId:string;action:string;at:string;before:Entry|null;after:Entry|null};
 export type User = {id:string;email:string};
