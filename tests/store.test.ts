@@ -86,3 +86,20 @@ test('a delayed old load failure cannot replace the new account refresh error',a
  pending.resolve(response({error:'Old account failure'},500));await oldLoad;
  assert.equal(store.getState().refreshError,'New account refresh failed');
 });
+
+test('failed first load remains unknown and retry preserves the error until it completes',async()=>{
+ store.dispatch(actions.signedIn(userA));
+ let calls=0;globalThis.fetch=async()=>{calls++;throw new Error('TLS failed')};
+ await reload();assert.equal(store.getState().summaryLoaded,false);assert.equal(store.getState().refreshError,'TLS failed');assert.equal(store.getState().summaryLoading,false);
+ const pending=deferred<Response>();globalThis.fetch=()=>{calls++;return pending.promise};const retry=reload();
+ assert.equal(store.getState().summaryLoading,true);assert.equal(store.getState().refreshError,'TLS failed');
+ pending.resolve(response([entry('saved','a')]));await retry;
+ assert.equal(calls,2);assert.equal(store.getState().summaryLoaded,true);assert.equal(store.getState().summaryLoading,false);assert.equal(store.getState().refreshError,'');
+});
+
+test('failed refresh keeps the last successfully loaded summary and resets on sign out',async()=>{
+ store.dispatch(actions.signedIn(userA));const saved=entry('saved','a');globalThis.fetch=async()=>response([saved]);await reload();
+ globalThis.fetch=async()=>{throw new Error('TLS failed')};await reload();
+ assert.equal(store.getState().summaryLoaded,true);assert.deepEqual(store.getState().entries,[saved]);
+ store.dispatch(actions.signedOut());assert.equal(store.getState().summaryLoaded,false);assert.deepEqual(store.getState().entries,[]);
+});

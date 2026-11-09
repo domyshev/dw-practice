@@ -175,3 +175,5 @@
 .log-dialog .log-content{min-height:0;flex:1 1 auto;overflow-x:hidden;overflow-y:auto;overscroll-behavior:none}
 @media(max-width:599px){.log-dialog .MuiDialog-paper{height:min(680px,calc(100dvh - 24px))}}
 :root[data-platform=ios] .log-dialog .MuiDialog-paper{height:min(680px,calc(100dvh - env(safe-area-inset-top) - env(safe-area-inset-bottom) - 24px))}
+
+.refresh-warning .MuiAlert-action{align-items:flex-start;flex-shrink:0}.refresh-warning .MuiButton-root{white-space:nowrap;word-break:normal}

@@ -9,29 +9,29 @@ export type Audit = {id:string;entryId:string;action:string;at:string;before:Ent
 export type User = {id:string;email:string};
 const slice = createSlice({
   name: 'practice',
-  initialState: {user:null as User|null, entries:[] as Entry[], audit:[] as Audit[], view:'overview', filter:'all', chartPeriod:storedPeriod(), sessionGeneration:0, loadId:0, refreshError:'', revision:0},
+  initialState: {user:null as User|null, entries:[] as Entry[], audit:[] as Audit[], view:'overview', filter:'all', chartPeriod:storedPeriod(), sessionGeneration:0, loadId:0, refreshError:'', summaryLoaded:false, summaryLoading:false, revision:0},
   reducers: {
     signedIn(s, a:PayloadAction<User>) {
-      s.user=a.payload; s.entries=[]; s.audit=[]; s.view='overview'; s.filter='all'; s.refreshError=''; s.sessionGeneration++; s.loadId=0;
+      s.user=a.payload; s.entries=[]; s.audit=[]; s.view='overview'; s.filter='all'; s.refreshError=''; s.summaryLoaded=false; s.summaryLoading=false; s.sessionGeneration++; s.loadId=0;
     },
     signedOut(s) {
-      s.user=null; s.entries=[]; s.audit=[]; s.view='overview'; s.filter='all'; s.refreshError=''; s.sessionGeneration++; s.loadId=0;
+      s.user=null; s.entries=[]; s.audit=[]; s.view='overview'; s.filter='all'; s.refreshError=''; s.summaryLoaded=false; s.summaryLoading=false; s.sessionGeneration++; s.loadId=0;
     },
     loading(s, a:PayloadAction<{generation:number; loadId:number}>) {
-      if (s.sessionGeneration===a.payload.generation) {s.loadId=a.payload.loadId; s.refreshError='';}
+      if (s.sessionGeneration===a.payload.generation) {s.loadId=a.payload.loadId; s.summaryLoading=true;}
     },
     loaded(s, a:PayloadAction<{generation:number;loadId:number;entries:Entry[];audit:Audit[]}>) {
       if (s.sessionGeneration!==a.payload.generation || s.loadId!==a.payload.loadId) return;
-      s.entries=a.payload.entries; s.audit=a.payload.audit; s.refreshError=''; s.revision++;
+      s.entries=a.payload.entries; s.audit=a.payload.audit; s.refreshError=''; s.summaryLoaded=true; s.summaryLoading=false; s.revision++;
     },
     loadFailed(s, a:PayloadAction<{generation:number;loadId:number;message:string}>) {
-      if (s.sessionGeneration===a.payload.generation && s.loadId===a.payload.loadId) s.refreshError=a.payload.message;
+      if (s.sessionGeneration===a.payload.generation && s.loadId===a.payload.loadId) {s.refreshError=a.payload.message; s.summaryLoading=false;}
     },
     committed(s, a:PayloadAction<{generation:number;id:string;entry:Entry|null}>) {
       if(s.sessionGeneration!==a.payload.generation) return;
       s.revision++;
       // Invalidate loads started before the mutation committed.
-      s.loadId=0;
+      s.loadId=0; s.summaryLoading=false;
     },
     setChartPeriod:(s,a:PayloadAction<ChartPeriod>)=>{s.chartPeriod=parseChartPeriod(a.payload)},
     navigate:(s,a:PayloadAction<string>)=>{s.view=a.payload;s.filter='all'},
@@ -78,7 +78,7 @@ export async function reload():Promise<void>{
     const audit:Audit[]=[];
     store.dispatch(actions.loaded({generation,loadId,entries,audit}));
   } catch(error) {
-    store.dispatch(actions.loadFailed({generation,loadId,message:(error as Error).message}));
+    store.dispatch(actions.loadFailed({generation,loadId,message:(error as Error)?.message||'Unable to connect to the server'}));
   }
 }
 export async function mutateJournal(path:string,method:'POST'|'PUT'|'DELETE',body:unknown,onCommitted:()=>void,idempotencyKey?:string):Promise<void>{
