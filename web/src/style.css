@@ -24,7 +24,7 @@
 .appearance-choice .MuiToggleButton-root{width:44px;padding:8px;min-height:40px}
 .menu-about{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:9px 16px 15px;font-size:12px;color:var(--muted)}
 .menu-about>span:last-child{font-size:11px;font-variant-numeric:tabular-nums}
-.stacked-bar{display:flex;flex-direction:column-reverse;width:min(28px,72%);min-height:2px;background:var(--border);border-radius:5px 5px 0 0;overflow:hidden}
+.stacked-bar{display:flex;flex-direction:column-reverse;width:min(28px,72%);min-height:2px;border-radius:5px 5px 0 0;overflow:hidden}
 .bar-segment{display:block;width:100%;flex-shrink:0}
 .bar-segment+ .bar-segment{box-shadow:0 1px 0 #fffaf542}
 .chart-legend{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px 12px;border-top:1px solid var(--border);padding-top:14px;color:var(--muted);font-size:10px}
@@ -177,3 +177,12 @@
 :root[data-platform=ios] .log-dialog .MuiDialog-paper{height:min(680px,calc(100dvh - env(safe-area-inset-top) - env(safe-area-inset-bottom) - 24px))}
 
 .refresh-warning .MuiAlert-action{align-items:flex-start;flex-shrink:0}.refresh-warning .MuiButton-root{white-space:nowrap;word-break:normal}
+
+/* Translucent glass finishes shared by chart bars and their legend. */
+.bar-segment,.completion-bar,.chart-legend i{box-shadow:inset 1px 0 0 #ffffffa6,inset -1px 0 0 #ffffff55,inset 0 1px 0 #ffffffb3}
+.glass-prostrations{background:linear-gradient(100deg,#f8d75a99 0%,#fff3b9df 32%,#edbd3999 100%)}
+.glass-diamond-mind{background:linear-gradient(110deg,#b9d3dd8c 0%,#ffffffed 35%,#d9eaf0a6 66%,#a8c6d099 100%)}
+.glass-mandala{background:linear-gradient(100deg,#ed994a99 0%,#ffd5a5df 34%,#e9823699 100%)}
+.glass-guru-yoga{background:linear-gradient(100deg,#bd7e7199 0%,#f3c9b9df 35%,#b96f6099 100%)}
+.glass-16th-karmapa{background:linear-gradient(100deg,#235ec9d9 0%,#8edbffed 35%,#388df1e6 65%,#234db8d9 100%);box-shadow:inset 1px 0 0 #ffffffcc,inset 0 1px 0 #fff,0 0 9px #4da8ff80}
+.glass-8th-karmapa{background:linear-gradient(155deg,#ff9facdd 0%,#ffe79ae6 20%,#a9efc6e6 40%,#94d9ffe6 60%,#b9a8ffe6 80%,#f7a9dce6 100%);box-shadow:inset 1px 0 0 #ffffffd9,inset 0 1px 0 #fff,0 0 9px #c2afff99}
