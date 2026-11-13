@@ -148,6 +148,7 @@
 .about-content>img{margin-top:0}
 
 .period-trigger.MuiButton-root{padding:0 8px}
+.chart-period-trigger.MuiButton-root{padding:0}
 .mock-badge.MuiChip-root{transform:translateY(4px)}
 .row-actions .MuiIconButton-root{width:28px;height:28px;min-width:28px;min-height:28px;padding:5px}
 .row-actions button:focus-visible,.header-right>button:focus-visible{outline-width:2px;outline-offset:1px}
@@ -189,5 +190,5 @@
 
 /* Vertical separators span the chart between adjacent periods. */
 .chart-track{position:relative}
-.chart-column:not(:last-child) .chart-track::after{content:"";position:absolute;right:-4px;top:0;width:1px;height:100%;background:var(--subtle);opacity:.35;pointer-events:none}
+.chart-column:not(:last-child) .chart-track::after{content:"";position:absolute;right:-4px;top:0;bottom:-24px;width:1px;background:var(--subtle);opacity:.35;pointer-events:none}
 .chart.many-columns .chart-column:not(:last-child) .chart-track::after{right:-2px}
