@@ -77,7 +77,7 @@ function EntryDate({entry}:{entry:Entry}){
 }
 function PeriodMenu({label}:{label:string}){
  const period=useAppSelector(state=>state.chartPeriod);const dispatch=useAppDispatch();const [anchor,setAnchor]=useState<HTMLElement|null>(null);
- return <><Tooltip title="Change period"><Button className="period-trigger chart-period-trigger" endIcon={<DateRangeOutlined/>} aria-label={`${label}: change period`} aria-haspopup="menu" aria-expanded={!!anchor} onClick={event=>setAnchor(event.currentTarget)}>{label}</Button></Tooltip><Menu anchorEl={anchor} open={!!anchor} onClose={()=>setAnchor(null)}>{chartPeriods.map(option=><MenuItem key={option.id} selected={period===option.id} onClick={()=>{dispatch(actions.setChartPeriod(option.id));setAnchor(null)}}>{option.title}</MenuItem>)}</Menu></>;
+ return <><span>{label}</span><Tooltip title="Change period"><IconButton className="chart-period-trigger" aria-label={`${label}: change period`} aria-haspopup="menu" aria-expanded={!!anchor} onClick={event=>setAnchor(event.currentTarget)}><DateRangeOutlined/></IconButton></Tooltip><Menu anchorEl={anchor} open={!!anchor} onClose={()=>setAnchor(null)}>{chartPeriods.map(option=><MenuItem key={option.id} selected={period===option.id} onClick={()=>{dispatch(actions.setChartPeriod(option.id));setAnchor(null)}}>{option.title}</MenuItem>)}</Menu></>;
 }
 function EntryCard({entry:e,onEdit,onDelete}:{entry:Entry;onEdit:(entry:Entry)=>void;onDelete:(entry:Entry)=>void}){
  const p=practices.find(p=>p.id===e.practice)!;

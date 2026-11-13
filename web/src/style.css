@@ -148,7 +148,8 @@
 .about-content>img{margin-top:0}
 
 .period-trigger.MuiButton-root{padding:0 8px}
-.chart-period-trigger.MuiButton-root{padding:0}
+.chart-period-trigger.MuiIconButton-root{padding:8px;margin:-8px -8px -8px 2px;color:var(--muted)}
+.chart-period-trigger.MuiIconButton-root .MuiSvgIcon-root{width:19px;height:19px}
 .mock-badge.MuiChip-root{transform:translateY(4px)}
 .row-actions .MuiIconButton-root{width:28px;height:28px;min-width:28px;min-height:28px;padding:5px}
 .row-actions button:focus-visible,.header-right>button:focus-visible{outline-width:2px;outline-offset:1px}
