@@ -2,6 +2,7 @@ import {defineConfig} from 'vite';
 import react from '@vitejs/plugin-react';
 export default defineConfig(({mode})=>({
  plugins:[react()],
+ define:{__BUILD_UTC__:JSON.stringify(new Date().toISOString().slice(0,16).replace('T',' ')+' UTC')},
  root:'web',
  build:{outDir:'../dist',emptyOutDir:true},
  server:{

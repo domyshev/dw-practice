@@ -163,7 +163,7 @@
 
 /* Completion bars indicate presence, independently of repetition totals. */
 .chart-track{gap:2px}
-.completion-bar{display:block;align-self:stretch;flex:1 1 0;min-width:0;border-radius:5px 5px 0 0}
+.completion-bar{display:block;height:20%;flex:1 1 0;min-width:0;border-radius:5px 5px 0 0}
 .chart-track .stacked-bar{flex:1 1 0;width:auto;min-width:0}
 .app-menu .MuiMenuItem-root{align-items:center;line-height:1.4}
 .menu-item-label{display:block;line-height:1.4}
@@ -187,7 +187,7 @@
 .glass-16th-karmapa{background:linear-gradient(100deg,#235ec9d9 0%,#8edbffed 35%,#388df1e6 65%,#234db8d9 100%);box-shadow:inset 1px 0 0 #ffffffcc,inset 0 1px 0 #fff,0 0 9px #4da8ff80}
 .glass-8th-karmapa{background:linear-gradient(155deg,#ff9facdd 0%,#ffe79ae6 20%,#a9efc6e6 40%,#94d9ffe6 60%,#b9a8ffe6 80%,#f7a9dce6 100%);box-shadow:inset 1px 0 0 #ffffffd9,inset 0 1px 0 #fff,0 0 9px #c2afff99}
 
-/* Small ticks separate adjacent periods along the horizontal axis. */
-.chart-column{position:relative}
-.chart-column:not(:last-child)::after{content:"";position:absolute;right:-4px;bottom:3px;width:1px;height:6px;background:var(--subtle);opacity:.65;pointer-events:none}
-.chart.many-columns .chart-column:not(:last-child)::after{right:-2px}
+/* Vertical separators span the chart between adjacent periods. */
+.chart-track{position:relative}
+.chart-column:not(:last-child) .chart-track::after{content:"";position:absolute;right:-4px;top:0;width:1px;height:100%;background:var(--subtle);opacity:.35;pointer-events:none}
+.chart.many-columns .chart-column:not(:last-child) .chart-track::after{right:-2px}
