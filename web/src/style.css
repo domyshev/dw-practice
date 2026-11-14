@@ -203,3 +203,6 @@
 .chart-axis-tick{position:absolute;right:0;transform:translateY(50%);line-height:14px;white-space:nowrap}
 .chart-axis-spacer{visibility:hidden;font-size:10px;margin-top:12px}
 .chart.many-columns .chart-axis-spacer{font-size:9px}
+
+/* Center the history action within its divider-bounded row. */
+.app-menu .MuiMenuItem-root.history-menu-item{display:flex;align-items:center;min-height:44px;margin-top:0;margin-bottom:0;padding-top:0;padding-bottom:0}
