@@ -85,6 +85,7 @@
 @media(max-width:359px){.mala-stepper{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:0}.mala-stepper output{grid-column:1/-1;grid-row:1;min-width:0}.mala-stepper .MuiIconButton-root{width:100%;min-width:0}.MuiDialogActions-root>.MuiButton-root:first-child{padding-left:10px;padding-right:10px}}
 
 .feed-period-choice{display:flex;align-items:center;gap:3px;color:var(--muted);font-size:11px;white-space:nowrap}
+.feed-period-label{font-size:13px;line-height:1.5;color:var(--muted);background:var(--soft);padding:3px 7px;border-radius:5px}
 .virtual-feed{scroll-padding-bottom:16px}
 
 .page-footer{padding:3px 0 6px;line-height:1}
