@@ -117,7 +117,7 @@ function App(){
  const history=logAudit.filter(event=>filter==='all'||[event.before,event.after].some(e=>e?.practice===filter));
  return <div className="app-shell">
   <header className="app-header">
-   <div className="header-brand-group"><button className="brand" aria-label="dw — home" onClick={()=>navigate('overview')}><img className="dw-logo" src="/diamond-way-logo-transparent.png" alt=""/><span>dw</span></button>{mockUI&&<Chip className="mock-badge" label="Mock data" size="small" color="warning" variant="outlined"/>}</div>
+   <div className="header-brand-group"><button className="brand" aria-label="practice diary — home" onClick={()=>navigate('overview')}><img className="dw-logo" src="/diamond-way-logo-transparent.png" alt=""/><span>practice diary</span></button>{mockUI&&<Chip className="mock-badge" label="Mock data" size="small" color="warning" variant="outlined"/>}</div>
    <div className="header-right"><IconButton aria-label="Open menu" aria-haspopup="menu" aria-expanded={!!menuAnchor} onClick={e=>setMenuAnchor(e.currentTarget)}><MenuRounded/></IconButton></div>
   </header>
   <Popover anchorEl={menuAnchor} open={!!menuAnchor} onClose={()=>setMenuAnchor(null)} anchorOrigin={{vertical:'bottom',horizontal:'right'}} transformOrigin={{vertical:'top',horizontal:'right'}} slotProps={{paper:{className:'app-menu'}}}>
