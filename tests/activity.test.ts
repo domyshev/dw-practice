@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import {test} from 'node:test';
-import {practiceActivity,parseChartPeriod} from '../web/src/activity.ts';
+import {practiceActivity,parseChartPeriod,chartAxisValues} from '../web/src/activity.ts';
 import {actions,store,type Entry} from '../web/src/store.ts';
 const entry=(at:string,total=10,initial=false):Entry=>({id:at,userId:'u',practice:'prostrations',large:0,small:0,repetitions:total,total,initial,occurredAt:at,timeZone:'UTC',offsetMinutes:0,note:'',createdAt:at,updatedAt:at,version:1});
 test('week includes exactly the last seven display-zone days and excludes starting balances',()=>{
@@ -36,4 +36,19 @@ test('completion meditations mark each period without adding repetitions',()=>{
   assert.deepEqual(bucket.completions,{'16th-karmapa':true,'8th-karmapa':true});assert.equal(bucket.total,12);assert.equal(result.total,12);
   assert.ok(result.buckets.filter(b=>b!==bucket).every(b=>!b.completions['16th-karmapa']&&!b.completions['8th-karmapa']));
  }
+});
+
+test('chart axis labels only actual positive repetition heights',()=>{
+ assert.deepEqual(chartAxisValues([0,108,108,0]),[108]);
+ assert.deepEqual(chartAxisValues([0,108,54,108]),[108,54]);
+ assert.deepEqual(chartAxisValues([0,0,0]),[]);
+ const completionOnly=practiceActivity([{...entry('2026-10-31T10:00:00Z',0),practice:'16th-karmapa'}],'week','UTC',new Date('2026-10-31T20:00:00Z'));
+ assert.deepEqual(chartAxisValues(completionOnly.buckets.map(bucket=>bucket.total)),[]);
+});
+test('chart axis prioritizes the top, midpoint and quarter heights without overlapping',()=>{
+ assert.deepEqual(chartAxisValues([108,54,81,27,80,82,53,55,1]),[108,81,54,27,1]);
+ const selected=chartAxisValues([100,99,98,77,75,74,51,50,49,26,25,24,2]);
+ assert.equal(selected[0],100);
+ assert.ok(selected.includes(50));assert.ok(selected.includes(75));assert.ok(selected.includes(25));
+ for(let i=1;i<selected.length;i++)assert.ok((selected[i-1]-selected[i])/selected[0]*118>=16);
 });

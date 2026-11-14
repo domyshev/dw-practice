@@ -9,6 +9,24 @@ export const chartPeriods=[
 ] as const;
 export type ChartPeriod=typeof chartPeriods[number]['id'];
 export function parseChartPeriod(value:unknown):ChartPeriod{return chartPeriods.some(p=>p.id===value)?value as ChartPeriod:'week'}
+
+// Select actual bar heights in breadth-first midpoint order, keeping their
+// labels far enough apart for the fixed-height chart.
+export function chartAxisValues(totals:number[],height=118,minGap=16):number[]{
+ const values=[...new Set(totals.filter(value=>Number.isFinite(value)&&value>0))].sort((a,b)=>a-b);
+ if(!values.length)return [];
+ const max=values.pop()!;const selected=[max];
+ const ranges:{low:number;high:number;values:number[]}[]=[{low:0,high:max,values}];
+ for(let i=0;i<ranges.length;i++){
+  const {low,high,values:remaining}=ranges[i];if(!remaining.length)continue;
+  const midpoint=(low+high)/2;
+  const closest=remaining.reduce((best,value)=>Math.abs(value-midpoint)<Math.abs(best-midpoint)?value:best);
+  if(selected.every(value=>Math.abs(value-closest)/max*height>=minGap))selected.push(closest);
+  const rest=remaining.filter(value=>value!==closest);
+  ranges.push({low:midpoint,high,values:rest.filter(value=>value>midpoint)},{low,high:midpoint,values:rest.filter(value=>value<=midpoint)});
+ }
+ return selected.sort((a,b)=>b-a);
+}
 const emptyCounts=():Record<Practice,number>=>({prostrations:0,'diamond-mind':0,mandala:0,'guru-yoga':0,'16th-karmapa':0,'8th-karmapa':0});
 type CompletionPractice='16th-karmapa'|'8th-karmapa';
 const emptyCompletions=():Record<CompletionPractice,boolean>=>({'16th-karmapa':false,'8th-karmapa':false});

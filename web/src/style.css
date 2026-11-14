@@ -193,3 +193,12 @@
 .chart-track{position:relative}
 .chart-column:not(:last-child) .chart-track::after{content:"";position:absolute;right:-4px;top:0;bottom:-24px;width:1px;background:var(--subtle);opacity:.35;pointer-events:none}
 .chart.many-columns .chart-column:not(:last-child) .chart-track::after{right:-2px}
+
+/* Axis ticks mark only measured bar heights. */
+.chart-axis{display:flex;flex:0 0 auto;flex-direction:column;justify-content:flex-end;color:var(--muted);font-size:10px}
+.chart-axis-track{height:118px;position:relative}
+.chart-axis-measure{display:block;visibility:hidden;white-space:nowrap;padding-right:9px}
+.chart-axis-tick{position:absolute;right:0;transform:translateY(50%);line-height:14px;padding-right:9px;white-space:nowrap}
+.chart-axis-tick::after{content:"";position:absolute;right:0;top:50%;width:5px;height:1px;background:var(--muted)}
+.chart-axis-spacer{visibility:hidden;font-size:10px;margin-top:12px}
+.chart.many-columns .chart-axis-spacer{font-size:9px}
