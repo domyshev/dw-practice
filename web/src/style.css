@@ -40,6 +40,7 @@
 .period-button.MuiIconButton-root{color:var(--muted);flex-shrink:0}
 .period-button .MuiSvgIcon-root{width:19px;height:19px}
 .chart-title h2{min-width:0}
+.chart-title h2>span{font-size:13px}
 .chart.many-columns{gap:4px}
 .chart.many-columns .chart-column label,.chart.many-columns .chart-column>span{font-size:9px}
 .chart-legend>span>span{min-width:0;flex:1}
