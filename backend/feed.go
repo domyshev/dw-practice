@@ -22,7 +22,11 @@ func (a *app) pageEntries(w http.ResponseWriter, r *http.Request) {
 			respond(w, 400, map[string]string{"error": "Invalid practice"})
 			return
 		}
-		query += ` AND json_extract(body,'$.practice')=?`
+		if a.postgres {
+			query += ` AND body::jsonb->>'practice'=?`
+		} else {
+			query += ` AND json_extract(body,'$.practice')=?`
+		}
 		args = append(args, practice)
 	}
 	if since := r.URL.Query().Get("since"); since != "" {
@@ -51,7 +55,7 @@ func (a *app) pageEntries(w http.ResponseWriter, r *http.Request) {
 	const pageSize = 20
 	query += ` ORDER BY occurred_at DESC,id DESC LIMIT ?`
 	args = append(args, pageSize+1)
-	rows, err := a.db.QueryContext(r.Context(), query, args...)
+	rows, err := a.db.QueryContext(r.Context(), bindSQL(query), args...)
 	if err != nil {
 		internal(w, err)
 		return
@@ -98,7 +102,7 @@ func (a *app) practiceSummary(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	u := r.Context().Value(userKey).(user)
-	rows, err := a.db.QueryContext(r.Context(), `SELECT body FROM entries WHERE user_id=? AND deleted=0`, u.ID)
+	rows, err := a.db.QueryContext(r.Context(), `SELECT body FROM entries WHERE user_id=$1 AND deleted=0`, u.ID)
 	if err != nil {
 		internal(w, err)
 		return

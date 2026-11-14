@@ -15,10 +15,10 @@ an existing release instead of replacing its files.
 The administrator-managed updater checks releases about every two minutes. It
 accepts only an Actions release for the current `main`, validates its workflow
 origin, checksum and image revision, and loads the ready-made image. It stops
-only DW Practice, takes a verified SQLite backup including WAL contents, starts
+only DW Practice, takes a PostgreSQL dump and verifies a full restore in an isolated database, starts
 the new image and checks both container health and the public HTTPS endpoint.
 The existing database, email settings, session secret, routing and other services
-remain in place. On failure it restores the previous image and database snapshot,
+remain in place. On failure it restores the previous image and database dump,
 while preserving the failed database files for diagnosis. A failed commit is not
 retried automatically; an administrator must request a retry or publish a fix.
 

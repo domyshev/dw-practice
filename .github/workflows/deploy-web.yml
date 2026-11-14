@@ -13,6 +13,15 @@ jobs:
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-24.04
     timeout-minutes: 25
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: integration
+          POSTGRES_PASSWORD: integration
+          POSTGRES_DB: dw_practice_test
+        ports: ['5432:5432']
+        options: --health-cmd "pg_isready -U integration -d dw_practice_test" --health-interval 5s --health-timeout 5s --health-retries 12
     permissions:
       contents: write
     steps:
@@ -28,6 +37,8 @@ jobs:
           go-version: '1.25.x'
           cache: true
       - name: Test the application
+        env:
+          TEST_DATABASE_URL: postgres://integration:integration@127.0.0.1:5432/dw_practice_test?sslmode=disable
         run: |
           npm ci
           npm test
@@ -68,7 +79,7 @@ jobs:
               echo 'Superseded by a newer main commit.'
               exit 0
             fi
-            if curl --fail --silent --show-error --max-time 10 "https://dw.domyshev.com/deployment.json?expected=$GITHUB_SHA&attempt=$attempt" > live.json && node --input-type=module -e 'import fs from "node:fs"; if(JSON.parse(fs.readFileSync("live.json")).commit!==process.env.GITHUB_SHA)process.exit(1)' && curl --fail --silent --show-error --max-time 10 https://dw.domyshev.com/api/health > health.json && node --input-type=module -e 'import fs from "node:fs";const h=JSON.parse(fs.readFileSync("health.json"));if(h.status!=="ok"||h.mock||h.emailMode!=="resend")process.exit(1)'; then
+            if curl --fail --silent --show-error --max-time 10 "https://dw.domyshev.com/deployment.json?expected=$GITHUB_SHA&attempt=$attempt" > live.json && node --input-type=module -e 'import fs from "node:fs"; if(JSON.parse(fs.readFileSync("live.json")).commit!==process.env.GITHUB_SHA)process.exit(1)' && curl --fail --silent --show-error --max-time 10 https://dw.domyshev.com/api/health > health.json && node --input-type=module -e 'import fs from "node:fs";const h=JSON.parse(fs.readFileSync("health.json"));if(h.status!=="ok"||h.mock||h.emailMode!=="resend"||h.database!=="postgresql")process.exit(1)'; then
               tag="deploy-web-$(date -u +%Y%m%dT%H%M%SZ)-${GITHUB_SHA:0:12}"
               gh api --method POST "repos/$GITHUB_REPOSITORY/git/refs" -f "ref=refs/tags/$tag" -f "sha=$GITHUB_SHA"
               printf '### Web deployment verified\n\nCommit: `%s`\n\nTag: `%s`\n\nURL: https://dw.domyshev.com/\n' "$GITHUB_SHA" "$tag" >> "$GITHUB_STEP_SUMMARY"

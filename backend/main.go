@@ -21,7 +21,6 @@ import (
 	"net/mail"
 	"net/url"
 	"os"
-	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
@@ -60,6 +59,7 @@ type audit struct {
 }
 type app struct {
 	db         *sql.DB
+	postgres   bool
 	secret     string
 	origin     string
 	production bool
@@ -167,7 +167,7 @@ func (a *app) handler() http.Handler {
 			internal(w, err)
 			return
 		}
-		payload := map[string]any{"status": "ok", "emailMode": a.emailMode}
+		payload := map[string]any{"status": "ok", "emailMode": a.emailMode, "database": a.databaseName()}
 		if a.mock {
 			payload["mock"] = true
 			payload["loginCode"] = mockLoginCode
@@ -216,7 +216,7 @@ func (a *app) auth(next http.Handler) http.Handler {
 			return
 		}
 		var u user
-		err = a.db.QueryRow(`SELECT u.id,u.email FROM sessions s JOIN users u ON u.id=s.user_id WHERE s.hash=? AND s.expires_at>?`, digest(c.Value), time.Now().Unix()).Scan(&u.ID, &u.Email)
+		err = a.db.QueryRow(`SELECT u.id,u.email FROM sessions s JOIN users u ON u.id=s.user_id WHERE s.hash=$1 AND s.expires_at>$2`, digest(c.Value), time.Now().Unix()).Scan(&u.ID, &u.Email)
 		if errors.Is(err, sql.ErrNoRows) {
 			fail(w, 401, "Please sign in")
 			return
@@ -252,7 +252,7 @@ func (a *app) requestCode(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err = a.send(r.Context(), email, code); err != nil {
-		_, _ = a.db.Exec(`UPDATE codes SET consumed=1 WHERE id=?`, id)
+		_, _ = a.db.Exec(`UPDATE codes SET consumed=1 WHERE id=$1`, id)
 		log.Printf("email delivery failed: %v", err)
 		fail(w, 502, "Email delivery failed. Please try again later.")
 		return
@@ -262,18 +262,26 @@ func (a *app) requestCode(w http.ResponseWriter, r *http.Request) {
 
 var errCodeRateLimited = errors.New("code request rate limited")
 
-// Only the rate-limit check and code insertion need the shared lock.
+// Only the rate-limit check and code insertion need transaction locks.
 // External delivery must not block other users' verification or journal writes.
 func (a *app) prepareCode(email, ip string) (int64, string, error) {
-	a.mu.Lock()
-	defer a.mu.Unlock()
+	unlock := a.lockLocal()
+	defer unlock()
+	tx, err := a.db.Begin()
+	if err != nil {
+		return 0, "", err
+	}
+	defer tx.Rollback()
+	if err = a.lockTransaction(tx, "email:"+email, "ip:"+ip); err != nil {
+		return 0, "", err
+	}
 	t := time.Now().Unix()
 	var emailCount, ipCount int
 	var latest int64
-	if err := a.db.QueryRow(`SELECT count(*),coalesce(max(created_at),0) FROM codes WHERE email=? AND created_at>?`, email, t-3600).Scan(&emailCount, &latest); err != nil {
+	if err := tx.QueryRow(`SELECT count(*),coalesce(max(created_at),0) FROM codes WHERE email=$1 AND created_at>$2`, email, t-3600).Scan(&emailCount, &latest); err != nil {
 		return 0, "", err
 	}
-	if err := a.db.QueryRow(`SELECT count(*) FROM codes WHERE ip=? AND created_at>?`, ip, t-3600).Scan(&ipCount); err != nil {
+	if err := tx.QueryRow(`SELECT count(*) FROM codes WHERE ip=$1 AND created_at>$2`, ip, t-3600).Scan(&ipCount); err != nil {
 		return 0, "", err
 	}
 	if (a.production || a.emailMode != "log") && (emailCount >= 5 || ipCount >= 20 || t-latest < 60) {
@@ -287,19 +295,11 @@ func (a *app) prepareCode(email, ip string) (int64, string, error) {
 	if a.mock && !a.production {
 		code = mockLoginCode
 	}
-	tx, err := a.db.Begin()
-	if err != nil {
+	if _, err = tx.Exec(`UPDATE codes SET consumed=1 WHERE email=$1`, email); err != nil {
 		return 0, "", err
 	}
-	defer tx.Rollback()
-	if _, err = tx.Exec(`UPDATE codes SET consumed=1 WHERE email=?`, email); err != nil {
-		return 0, "", err
-	}
-	res, err := tx.Exec(`INSERT INTO codes(email,hash,ip,created_at,expires_at) VALUES(?,?,?,?,?)`, email, a.codeHash(email, code), ip, t, t+600)
-	if err != nil {
-		return 0, "", err
-	}
-	id, err := res.LastInsertId()
+	var id int64
+	err = tx.QueryRow(`INSERT INTO codes(email,hash,ip,created_at,expires_at) VALUES($1,$2,$3,$4,$5) RETURNING id`, email, a.codeHash(email, code), ip, t, t+600).Scan(&id)
 	if err != nil {
 		return 0, "", err
 	}
@@ -332,25 +332,29 @@ func (a *app) verifyCode(w http.ResponseWriter, r *http.Request) {
 		a.mockSignIn(w, r, email)
 		return
 	}
-	a.mu.Lock()
-	defer a.mu.Unlock()
+	unlock := a.lockLocal()
+	defer unlock()
 	tx, err := a.db.Begin()
 	if err != nil {
 		internal(w, err)
 		return
 	}
 	defer tx.Rollback()
+	if err = a.lockTransaction(tx, "email:"+email); err != nil {
+		internal(w, err)
+		return
+	}
 	var id, expires int64
 	var hash string
 	var attempts int
-	err = tx.QueryRow(`SELECT id,hash,expires_at,attempts FROM codes WHERE email=? AND consumed=0 ORDER BY id DESC LIMIT 1`, email).Scan(&id, &hash, &expires, &attempts)
+	err = tx.QueryRow(`SELECT id,hash,expires_at,attempts FROM codes WHERE email=$1 AND consumed=0 ORDER BY id DESC LIMIT 1`, email).Scan(&id, &hash, &expires, &attempts)
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {
 		internal(w, err)
 		return
 	}
 	if err != nil || expires <= time.Now().Unix() || attempts >= 5 || !hmac.Equal([]byte(hash), []byte(a.codeHash(email, in.Code))) {
 		if id != 0 {
-			if _, err = tx.Exec(`UPDATE codes SET attempts=attempts+1 WHERE id=?`, id); err != nil {
+			if _, err = tx.Exec(`UPDATE codes SET attempts=attempts+1 WHERE id=$1`, id); err != nil {
 				internal(w, err)
 				return
 			}
@@ -362,21 +366,21 @@ func (a *app) verifyCode(w http.ResponseWriter, r *http.Request) {
 		fail(w, 401, "Invalid or expired code")
 		return
 	}
-	if _, err = tx.Exec(`INSERT INTO users(id,email,created_at) VALUES(?,?,?) ON CONFLICT(email) DO NOTHING`, token(), email, now()); err != nil {
+	if _, err = tx.Exec(`INSERT INTO users(id,email,created_at) VALUES($1,$2,$3) ON CONFLICT(email) DO NOTHING`, token(), email, now()); err != nil {
 		internal(w, err)
 		return
 	}
 	var u user
-	if err = tx.QueryRow(`SELECT id,email FROM users WHERE email=?`, email).Scan(&u.ID, &u.Email); err != nil {
+	if err = tx.QueryRow(`SELECT id,email FROM users WHERE email=$1`, email).Scan(&u.ID, &u.Email); err != nil {
 		internal(w, err)
 		return
 	}
 	session := token()
-	if _, err = tx.Exec(`INSERT INTO sessions(hash,user_id,expires_at) VALUES(?,?,?)`, digest(session), u.ID, time.Now().Add(30*24*time.Hour).Unix()); err != nil {
+	if _, err = tx.Exec(`INSERT INTO sessions(hash,user_id,expires_at) VALUES($1,$2,$3)`, digest(session), u.ID, time.Now().Add(30*24*time.Hour).Unix()); err != nil {
 		internal(w, err)
 		return
 	}
-	if _, err = tx.Exec(`UPDATE codes SET consumed=1 WHERE id=?`, id); err != nil {
+	if _, err = tx.Exec(`UPDATE codes SET consumed=1 WHERE id=$1`, id); err != nil {
 		internal(w, err)
 		return
 	}
@@ -389,7 +393,7 @@ func (a *app) verifyCode(w http.ResponseWriter, r *http.Request) {
 }
 func (a *app) logout(w http.ResponseWriter, r *http.Request) {
 	c, _ := r.Cookie(a.sessionCookieName())
-	if _, err := a.db.Exec(`DELETE FROM sessions WHERE hash=?`, digest(c.Value)); err != nil {
+	if _, err := a.db.Exec(`DELETE FROM sessions WHERE hash=$1`, digest(c.Value)); err != nil {
 		internal(w, err)
 		return
 	}
@@ -398,7 +402,7 @@ func (a *app) logout(w http.ResponseWriter, r *http.Request) {
 }
 func (a *app) listEntries(w http.ResponseWriter, r *http.Request) {
 	u := r.Context().Value(userKey).(user)
-	rows, err := a.db.Query(`SELECT body FROM entries WHERE user_id=? AND deleted=0 ORDER BY occurred_at DESC`, u.ID)
+	rows, err := a.db.Query(`SELECT body FROM entries WHERE user_id=$1 AND deleted=0 ORDER BY occurred_at DESC`, u.ID)
 	if err != nil {
 		internal(w, err)
 		return
@@ -489,21 +493,25 @@ func (a *app) mutate(w http.ResponseWriter, r *http.Request) {
 	if r.Method == "POST" && requestKey != "" {
 		requestHash = digest(serialized(&e).(string))
 	}
-	a.mu.Lock()
-	defer a.mu.Unlock()
+	unlock := a.lockLocal()
+	defer unlock()
 	tx, err := a.db.Begin()
 	if err != nil {
 		internal(w, err)
 		return
 	}
 	defer tx.Rollback()
+	if err = a.lockTransaction(tx, "user:"+u.ID); err != nil {
+		internal(w, err)
+		return
+	}
 	var before, after *entry
 	action := "created"
 	status := 200
 	if r.Method == "POST" {
 		if requestKey != "" {
 			var previousHash, body string
-			err = tx.QueryRow(`SELECT request_hash,entry_body FROM create_requests WHERE user_id=? AND request_key=?`, u.ID, requestKey).Scan(&previousHash, &body)
+			err = tx.QueryRow(`SELECT request_hash,entry_body FROM create_requests WHERE user_id=$1 AND request_key=$2`, u.ID, requestKey).Scan(&previousHash, &body)
 			if err == nil {
 				if previousHash != requestHash {
 					fail(w, 409, "This idempotency key was already used for another entry")
@@ -530,14 +538,14 @@ func (a *app) mutate(w http.ResponseWriter, r *http.Request) {
 		e.Version = 1
 		after = &e
 		status = 201
-		if _, err = tx.Exec(`INSERT INTO entries(id,user_id,body,occurred_at) VALUES(?,?,?,?)`, e.ID, u.ID, serialized(&e), mustUTC(e.OccurredAt)); err != nil {
+		if _, err = tx.Exec(`INSERT INTO entries(id,user_id,body,occurred_at) VALUES($1,$2,$3,$4)`, e.ID, u.ID, serialized(&e), mustUTC(e.OccurredAt)); err != nil {
 			internal(w, err)
 			return
 		}
 	} else {
 		var body string
 		old := entry{}
-		err = tx.QueryRow(`SELECT body FROM entries WHERE id=? AND user_id=? AND deleted=0`, r.PathValue("id"), u.ID).Scan(&body)
+		err = tx.QueryRow(`SELECT body FROM entries WHERE id=$1 AND user_id=$2 AND deleted=0`, r.PathValue("id"), u.ID).Scan(&body)
 		if errors.Is(err, sql.ErrNoRows) {
 			fail(w, 404, "Entry not found")
 			return
@@ -559,7 +567,7 @@ func (a *app) mutate(w http.ResponseWriter, r *http.Request) {
 			}
 			e = old
 			action = "deleted"
-			_, err = tx.Exec(`UPDATE entries SET deleted=1 WHERE id=? AND user_id=?`, old.ID, u.ID)
+			_, err = tx.Exec(`UPDATE entries SET deleted=1 WHERE id=$1 AND user_id=$2`, old.ID, u.ID)
 		} else {
 			if e.Version != old.Version {
 				fail(w, 409, "This entry changed. Refresh and try again.")
@@ -573,7 +581,7 @@ func (a *app) mutate(w http.ResponseWriter, r *http.Request) {
 			e.Version = old.Version + 1
 			after = &e
 			action = "updated"
-			_, err = tx.Exec(`UPDATE entries SET body=?,occurred_at=? WHERE id=? AND user_id=?`, serialized(&e), mustUTC(e.OccurredAt), e.ID, u.ID)
+			_, err = tx.Exec(`UPDATE entries SET body=$1,occurred_at=$2 WHERE id=$3 AND user_id=$4`, serialized(&e), mustUTC(e.OccurredAt), e.ID, u.ID)
 		}
 		if err != nil {
 			internal(w, err)
@@ -581,12 +589,12 @@ func (a *app) mutate(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if r.Method == "POST" && requestKey != "" {
-		if _, err = tx.Exec(`INSERT INTO create_requests(user_id,request_key,request_hash,entry_body) VALUES(?,?,?,?)`, u.ID, requestKey, requestHash, serialized(after)); err != nil {
+		if _, err = tx.Exec(`INSERT INTO create_requests(user_id,request_key,request_hash,entry_body) VALUES($1,$2,$3,$4)`, u.ID, requestKey, requestHash, serialized(after)); err != nil {
 			internal(w, err)
 			return
 		}
 	}
-	if _, err = tx.Exec(`INSERT INTO audit(id,user_id,entry_id,action,at,before_body,after_body) VALUES(?,?,?,?,?,?,?)`, token(), u.ID, e.ID, action, now(), serialized(before), serialized(after)); err != nil {
+	if _, err = tx.Exec(`INSERT INTO audit(id,user_id,entry_id,action,at,before_body,after_body) VALUES($1,$2,$3,$4,$5,$6,$7)`, token(), u.ID, e.ID, action, now(), serialized(before), serialized(after)); err != nil {
 		internal(w, err)
 		return
 	}
@@ -602,7 +610,7 @@ func mustUTC(s string) string {
 }
 func (a *app) listAudit(w http.ResponseWriter, r *http.Request) {
 	u := r.Context().Value(userKey).(user)
-	rows, err := a.db.Query(`SELECT id,entry_id,action,at,before_body,after_body FROM audit WHERE user_id=? ORDER BY at DESC`, u.ID)
+	rows, err := a.db.Query(`SELECT id,entry_id,action,at,before_body,after_body FROM audit WHERE user_id=$1 ORDER BY at DESC`, u.ID)
 	if err != nil {
 		internal(w, err)
 		return
@@ -653,7 +661,15 @@ func practiceSender(value string) (string, error) {
 
 func main() {
 	mockMode := flag.Bool("mock", false, "Run a loopback-only mock API with disposable fixtures")
+	initPostgres := flag.Bool("init-postgres", false, "Initialize the PostgreSQL schema using DATABASE_URL")
+	importSQLite := flag.String("import-sqlite", "", "Import a SQLite snapshot into an empty PostgreSQL database, then exit")
 	flag.Parse()
+	if *initPostgres || *importSQLite != "" {
+		if err := migratePostgres(*importSQLite); err != nil {
+			log.Fatal(err)
+		}
+		return
+	}
 	if *mockMode {
 		if err := runMock(); err != nil {
 			log.Fatal(err)
@@ -687,17 +703,16 @@ func main() {
 			log.Fatal("EMAIL_FROM must contain a valid email address")
 		}
 	}
-	path := getenv("DATABASE_PATH", "data/karma.db")
-	if err := os.MkdirAll(filepath.Dir(path), 0700); err != nil {
-		log.Fatal(err)
-	}
-	db, err := openDB(path)
+	db, err := openPostgres(os.Getenv("DATABASE_URL"))
 	if err != nil {
 		log.Fatal(err)
 	}
 	defer db.Close()
-	_ = os.Chmod(path, 0600)
-	a := &app{db: db, secret: secret, production: production, emailMode: mode, origin: origin}
+	var schemaVersion int
+	if err = db.QueryRow(`SELECT version FROM schema_version WHERE id=1`).Scan(&schemaVersion); err != nil || schemaVersion != 1 {
+		log.Fatal("PostgreSQL schema is not initialized")
+	}
+	a := &app{db: db, postgres: true, secret: secret, production: production, emailMode: mode, origin: origin}
 	a.send = func(ctx context.Context, email, code string) error {
 		if mode == "log" {
 			log.Printf("DEVELOPMENT ONLY — sign-in code for %s: %s", email, code)

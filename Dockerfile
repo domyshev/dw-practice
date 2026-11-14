@@ -22,9 +22,7 @@ RUN apk add --no-cache ca-certificates && addgroup -g 10001 karma && adduser -D 
 WORKDIR /app
 COPY --from=api /karma /app/karma
 COPY --from=web /src/dist /app/dist
-RUN mkdir /app/data && chown karma:karma /app/data
 USER karma
-ENV APP_ENV=production EMAIL_MODE=resend LISTEN_ADDR=0.0.0.0:8080 DATABASE_PATH=/app/data/karma.db
+ENV APP_ENV=production EMAIL_MODE=resend LISTEN_ADDR=0.0.0.0:8080
 EXPOSE 8080
-VOLUME ["/app/data"]
 ENTRYPOINT ["/app/karma"]
